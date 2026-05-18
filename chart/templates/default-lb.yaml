@@ -16,6 +16,9 @@ metadata:
     {{- end }}
 spec:
   type: LoadBalancer
+  {{- with .Values.defaultLoadBalancer.loadBalancerIP }}
+  loadBalancerIP: {{ . | quote }}
+  {{- end }}
   allocateLoadBalancerNodePorts: {{ .Values.defaultLoadBalancer.allocateLoadBalancerNodePorts }}
   {{- with .Values.defaultLoadBalancer.externalTrafficPolicy }}
   externalTrafficPolicy: {{ . }}

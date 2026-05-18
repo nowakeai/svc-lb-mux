@@ -161,10 +161,13 @@ defaultLoadBalancer:
   name: mux
   labels: {}
   annotations:
-    # https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.9/guide/service/nlb
-    service.beta.kubernetes.io/aws-load-balancer-type: external
-    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
-    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
-    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
-  loadBalancerClass: service.k8s.aws/nlb
-  allocateLoadBalancerNodePorts: false
+    # Create a backend service-based external passthrough Network Load Balancer on GKE.
+    cloud.google.com/l4-rbs: "enabled"
+    # Optional: bind by GCP address resource name on GKE 1.29+.
+    # networking.gke.io/load-balancer-ip-addresses: my-mux-ip
+    # Optional: choose Standard or Premium network tier. Premium is the GCP default.
+    # cloud.google.com/network-tier: Premium
+  # Optional: bind by IPv4 address. Reserve the regional static address first.
+  loadBalancerIP: ""
+  loadBalancerClass: ""
+  allocateLoadBalancerNodePorts: true

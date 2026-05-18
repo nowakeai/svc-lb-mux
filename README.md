@@ -8,6 +8,7 @@ The repository is split into application code and deployment packaging:
 - `chart/`: Helm chart
 - `Dockerfile`: controller image build
 - `.github/workflows/ci.yml`: validation and GHCR image publishing
+- `gke-lb-setup.md`: GKE LoadBalancer setup guide
 
 The Kubernetes API prefix is configurable through `api.prefix`. New installs default to `svc-mux.nowake.ai`.
 
@@ -50,13 +51,13 @@ defaultLoadBalancer:
   name: mux
   labels: {}
   annotations:
-    service.beta.kubernetes.io/aws-load-balancer-type: external
-    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
-    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
-  loadBalancerClass: service.k8s.aws/nlb
+    cloud.google.com/l4-rbs: "enabled"
+  loadBalancerIP: ""
+  loadBalancerClass: ""
+  allocateLoadBalancerNodePorts: true
 ```
 
-For AWS, install the AWS Load Balancer Controller and use NLB `ip` target mode. See [aws-nlb-setup.md](aws-nlb-setup.md).
+The default chart values target GKE. See [gke-lb-setup.md](gke-lb-setup.md) for GKE architecture, static IP binding, and provider-specific options. For EKS/NLB deployments, see [aws-nlb-setup.md](aws-nlb-setup.md).
 
 If a multiplexer has no channels, the controller keeps a placeholder `101/TCP` port.
 
