@@ -13,9 +13,12 @@ from reconcile import (
     collect_auto_allocation_keys,
     collect_static_port_claims,
     count_ready_channel_pods,
+    effective_mux_max_ports,
     find_mux_port_conflicts,
     get_current_endpoints_set,
     get_old_endpoints_set,
+    gke_max_ports_warning,
+    is_gke_load_balancer_service,
     parse_external_ports_annotation,
     port_hash,
     process_channel_ports,
@@ -61,6 +64,40 @@ class ReconcileHelperTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "expected >= 1"):
             requested_max_ports(mux)
+
+    def test_gke_mux_is_detected_from_load_balancer_class(self):
+        mux = FakeMux(spec={"loadBalancerClass": "networking.gke.io/l4-regional-external"})
+
+        self.assertTrue(is_gke_load_balancer_service(mux))
+
+    def test_gke_mux_is_detected_from_provider_annotations(self):
+        mux = FakeMux(annotations={"cloud.google.com/l4-rbs": "enabled"})
+
+        self.assertTrue(is_gke_load_balancer_service(mux))
+
+    def test_effective_mux_max_ports_applies_gke_default(self):
+        mux = FakeMux(spec={"loadBalancerClass": "networking.gke.io/l4-regional-external"})
+
+        self.assertEqual(effective_mux_max_ports(mux), 100)
+        self.assertIn("applying the GKE", gke_max_ports_warning(mux))
+
+    def test_effective_mux_max_ports_caps_gke_overrides(self):
+        mux = FakeMux(
+            annotations={"svc-mux.nowake.ai/max-ports": "200"},
+            spec={"loadBalancerClass": "networking.gke.io/l4-regional-external"},
+        )
+
+        self.assertEqual(effective_mux_max_ports(mux), 100)
+        self.assertIn("using the GKE", gke_max_ports_warning(mux))
+
+    def test_effective_mux_max_ports_keeps_lower_gke_override(self):
+        mux = FakeMux(
+            annotations={"svc-mux.nowake.ai/max-ports": "50"},
+            spec={"loadBalancerClass": "networking.gke.io/l4-regional-external"},
+        )
+
+        self.assertEqual(effective_mux_max_ports(mux), 50)
+        self.assertIsNone(gke_max_ports_warning(mux))
 
     def test_would_exceed_mux_port_limit_counts_channel_ports(self):
         current = {MuxPort("a", 20000, "TCP")}
@@ -381,8 +418,9 @@ def channel_service(name="api", namespace="app", annotations=None, ports=None):
 
 
 class FakeMux:
-    def __init__(self, annotations=None):
+    def __init__(self, annotations=None, spec=None):
         self.annotations = annotations or {}
+        self.spec = spec or {}
 
 class FakeService:
     def __init__(self, body):

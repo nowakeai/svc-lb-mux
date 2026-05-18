@@ -125,7 +125,7 @@ Each `(external port, protocol)` pair can be used by only one channel on the sam
 
 ```yaml
 defaultLoadBalancer:
-  portRange: "20000-21000"
+  portRange: "20000-20099"
   # Optional per-mux override. Defaults to <mux-name>-port-allocations.
   allocationConfigMapName: ""
 ```

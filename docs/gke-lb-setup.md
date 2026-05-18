@@ -153,6 +153,8 @@ defaultLoadBalancer:
 
 With these settings, GKE can continue to own the forwarding rule and firewall rule. Adding a channel consumes one mux Service port inside the configured range; when the mux already has 100 ports, the controller emits a `MuxPortLimitExceeded` event and skips additional channels instead of pushing the Service into unsupported GKE behavior.
 
+The controller also detects GKE mux Services from GKE load balancer classes and common GKE Service annotations. If a detected GKE mux has no `svc-mux.nowake.ai/max-ports` annotation, the controller applies the GKE limit of 100 ports and emits a `GkePortLimitApplied` Warning event. If the configured value is higher than 100, the controller caps the effective value to 100 and emits the same Warning event.
+
 Do not manually edit the GKE-managed firewall rule. If you need more than 100 one-port channels, create additional mux Services with non-overlapping ranges, for example `20000-20099`, `20100-20199`, and `20200-20299`.
 
 ## Network Tier
@@ -265,7 +267,7 @@ single_mux_channels <= min(
 
 GKE documents Service load balancer port behavior around small discrete port sets and larger port sets. For backend service-based external passthrough Network Load Balancers, the Google Cloud forwarding rule can represent up to five discrete ports or one contiguous port range. GKE Service load balancer parameters also document the `all ports` behavior for more than five and up to 100 unique Service ports.
 
-Because the current controller writes one mux `spec.ports[]` entry for each exposed channel port, **100 one-port channels per mux** is the GKE-native public traffic target. The chart enforces this with `maxPorts: 100` by default.
+Because the current controller writes one mux `spec.ports[]` entry for each exposed channel port, **100 one-port channels per mux** is the GKE-native public traffic target. The chart declares this with `maxPorts: 100` by default, and the controller enforces the same limit automatically for mux Services that it detects as GKE-backed even when users create mux Services outside the chart.
 
 For more than roughly 100 one-port channels, prefer one of these approaches:
 
@@ -339,7 +341,27 @@ gcloud compute firewall-rules list \
   --filter="network:default AND allowed.tcp:*"
 ~~~
 
-Confirm that the GKE-managed forwarding rule and firewall rule cover the mux port range. Public traffic should be tested against the mux external IP and every allocated channel port before considering the capacity test successful.
+Confirm that the GKE-managed forwarding rule and firewall rule cover the mux port range. Public traffic should be tested against the mux external IP and every allocated channel port before considering the capacity test successful. For a stronger validation, run 100 channels backed by 100 different pods and verify that each external port returns the expected per-backend response body, not just a successful TCP connect.
+
+The repository includes a pressure-test helper that generates 100 one-pod channel backends with distinct response bodies:
+
+~~~console
+test-local/gke-pressure.py manifest \
+  --namespace svc-mux-eip-test \
+  --load-balancer-class svc-mux.nowake.ai/mux-eip.svc-mux-eip \
+  | kubectl apply -f -
+
+kubectl get configmap mux-eip-port-allocations \
+  -n svc-mux-eip \
+  -o jsonpath='{.data.allocations\.json}' > /tmp/mux-eip-allocations.json
+
+test-local/gke-pressure.py probe \
+  --host 34.83.176.141 \
+  --allocations-json /tmp/mux-eip-allocations.json \
+  --namespace svc-mux-eip-test
+~~~
+
+The probe reads the mux allocation ConfigMap so it validates the actual `channel -> external port` mapping chosen by the controller. A successful run should report `ok=100 missing=0 failed=0`.
 
 ### References
 

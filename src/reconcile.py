@@ -13,6 +13,9 @@ from config import (
     ANNOTATION_MAX_PORTS,
     ANNOTATION_PORTS,
     DRYRUN_MODE,
+    GKE_LOAD_BALANCER_CLASS_PREFIX,
+    GKE_PROVIDER_ANNOTATIONS,
+    GKE_SERVICE_LOADBALANCER_MAX_PORTS,
     annotation_key,
 )
 from models import MuxEp, MuxPort
@@ -73,6 +76,53 @@ def requested_max_ports(mux):
     if max_ports < 1:
         raise ValueError(f"Invalid {ANNOTATION_MAX_PORTS} value {max_ports}; expected >= 1")
     return max_ports
+
+
+def _object_get(value, key, default=None):
+    if value is None:
+        return default
+    if isinstance(value, dict):
+        return value.get(key, default)
+    return getattr(value, key, default)
+
+
+def is_gke_load_balancer_service(mux):
+    spec = _object_get(mux, "spec", {})
+    load_balancer_class = _object_get(spec, "loadBalancerClass", "") or ""
+    if str(load_balancer_class).startswith(GKE_LOAD_BALANCER_CLASS_PREFIX):
+        return True
+
+    annotations = _object_get(mux, "annotations", {}) or {}
+    return any(key in annotations for key in GKE_PROVIDER_ANNOTATIONS)
+
+
+def effective_mux_max_ports(mux):
+    max_ports = requested_max_ports(mux)
+    if not is_gke_load_balancer_service(mux):
+        return max_ports
+    if max_ports is None or max_ports > GKE_SERVICE_LOADBALANCER_MAX_PORTS:
+        return GKE_SERVICE_LOADBALANCER_MAX_PORTS
+    return max_ports
+
+
+def gke_max_ports_warning(mux):
+    if not is_gke_load_balancer_service(mux):
+        return None
+
+    configured = requested_max_ports(mux)
+    if configured is None:
+        return (
+            "Detected a GKE LoadBalancer mux without "
+            f"{ANNOTATION_MAX_PORTS}; applying the GKE Service LoadBalancer "
+            f"limit of {GKE_SERVICE_LOADBALANCER_MAX_PORTS} ports"
+        )
+    if configured > GKE_SERVICE_LOADBALANCER_MAX_PORTS:
+        return (
+            f"Detected a GKE LoadBalancer mux with {ANNOTATION_MAX_PORTS}={configured}; "
+            f"using the GKE Service LoadBalancer limit of "
+            f"{GKE_SERVICE_LOADBALANCER_MAX_PORTS} ports"
+        )
+    return None
 
 
 def channel_declared_port_count(channel):

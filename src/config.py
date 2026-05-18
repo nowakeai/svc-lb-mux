@@ -3,6 +3,13 @@
 import os
 
 DEFAULT_API_PREFIX = "svc-mux.nowake.ai"
+GKE_SERVICE_LOADBALANCER_MAX_PORTS = 100
+GKE_LOAD_BALANCER_CLASS_PREFIX = "networking.gke.io/"
+GKE_PROVIDER_ANNOTATIONS = (
+    "cloud.google.com/l4-rbs",
+    "networking.gke.io/load-balancer-type",
+    "networking.gke.io/load-balancer-ip-addresses",
+)
 
 
 def env_bool(name: str, default: bool = False) -> bool:

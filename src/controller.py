@@ -41,9 +41,10 @@ from reconcile import (
     count_ready_channel_pods,
     get_current_endpoints_set,
     get_old_endpoints_set,
+    effective_mux_max_ports,
     find_mux_port_conflicts,
+    gke_max_ports_warning,
     process_channel_ports,
-    requested_max_ports,
     update_channel_service_metadata,
     would_exceed_mux_port_limit,
 )
@@ -437,14 +438,23 @@ def mux_daemon(
         port_owners = {}
 
         try:
-            max_ports = requested_max_ports(mux)
+            max_ports_warning = gke_max_ports_warning(mux)
+            max_ports = effective_mux_max_ports(mux)
         except ValueError as error:
             events.error(
                 body,
                 reason="InvalidMaxPorts",
                 message=str(error),
             )
+            max_ports_warning = None
             max_ports = 0
+
+        if max_ports_warning:
+            events.warn(
+                body,
+                reason="GkePortLimitApplied",
+                message=max_ports_warning,
+            )
 
         sorted_channels = sorted(
             tuple(channels),
