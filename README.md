@@ -5,6 +5,12 @@
 
 Service LoadBalancer Multiplexer is a Kubernetes controller that lets multiple `LoadBalancer` Services share one Layer 4 load balancer.
 
+## Motivation
+
+Kubernetes makes external TCP/UDP exposure convenient with `type: LoadBalancer`, but each Service usually asks the cloud provider to create a separate load balancer. That becomes painful for workloads with many externally reachable ports or many small services: cloud load balancer quotas become a scaling limit, provisioning is slower, and every extra load balancer adds recurring cost.
+
+This project was built for cases where many Services can safely share one provider-managed Layer 4 load balancer. A selectorless mux Service owns the cloud load balancer, while channel Services keep the familiar Kubernetes Service workflow. The controller mirrors channel ports and endpoints onto the mux, then syncs the mux ingress status back to the channels. The result is fewer cloud load balancers, lower cost, and less pressure on provider load balancer limits without forcing application teams to give up Service objects.
+
 The repository is split into application code and deployment packaging:
 
 - `src/`: controller and debug UI source code
