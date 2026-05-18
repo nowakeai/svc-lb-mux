@@ -11,8 +11,10 @@ metadata:
   annotations:
     helm.sh/resource-policy: keep
     {{ printf "%s/multiplexer" .Values.api.prefix | quote }}: "true"
-    {{- with .Values.defaultLoadBalancer.annotations }}
-    {{- . | toYaml | nindent 4 }}
+    {{- range $key, $value := .Values.defaultLoadBalancer.annotations }}
+    {{- if $value }}
+    {{ $key | quote }}: {{ $value | quote }}
+    {{- end }}
     {{- end }}
 spec:
   type: LoadBalancer

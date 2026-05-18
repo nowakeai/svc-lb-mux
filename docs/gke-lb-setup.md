@@ -108,12 +108,14 @@ helm upgrade --install svc-mux ./chart \
 
 ### Option 2: Bind By Address Resource Name
 
-On supported GKE versions, use the GKE annotation that names the reserved address resource:
+On supported GKE versions, use the GKE annotation that names the reserved address resource. For external passthrough Network Load Balancers, current GKE documentation requires the GKE load balancer class when using this annotation:
 
 ```yaml
 defaultLoadBalancer:
   annotations:
+    cloud.google.com/l4-rbs: "enabled"
     networking.gke.io/load-balancer-ip-addresses: svc-mux-ip
+  loadBalancerClass: networking.gke.io/l4-regional-external
 ```
 
 Install or upgrade:
@@ -122,10 +124,11 @@ Install or upgrade:
 helm upgrade --install svc-mux ./chart \
   --namespace svc-mux \
   --set image.tag=latest \
-  --set-string defaultLoadBalancer.annotations.networking\.gke\.io/load-balancer-ip-addresses=$ADDRESS_NAME
+  --set-string defaultLoadBalancer.annotations.networking\.gke\.io/load-balancer-ip-addresses=$ADDRESS_NAME \
+  --set defaultLoadBalancer.loadBalancerClass=networking.gke.io/l4-regional-external
 ```
 
-Use the resource-name annotation when you want Kubernetes manifests to reference the reserved address by name instead of embedding the numeric IP. Use `loadBalancerIP` when you want the most direct, provider-neutral Service field.
+Use the resource-name annotation when you want Kubernetes manifests to reference the reserved address by name instead of embedding the numeric IP. Use `loadBalancerIP` when you want the most direct, provider-neutral Service field. Set the load balancer class before creating the Service; Service load balancer class is immutable after creation.
 
 ## Network Tier
 
@@ -141,11 +144,12 @@ Use `Standard` only when your cluster, static address, and load balancing requir
 
 ## Internal Load Balancer
 
-The chart defaults are for an external mux. For an internal GKE passthrough Network Load Balancer, use GKE's internal load balancer annotation:
+The chart defaults are for an external mux. For an internal GKE passthrough Network Load Balancer, use GKE's internal load balancer annotation and remove the external RBS annotation:
 
 ```yaml
 defaultLoadBalancer:
   annotations:
+    cloud.google.com/l4-rbs: ""
     networking.gke.io/load-balancer-type: Internal
   loadBalancerClass: ""
 ```

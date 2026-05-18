@@ -8,7 +8,7 @@ The repository is split into application code and deployment packaging:
 - `chart/`: Helm chart, installed by default as release `svc-mux` in namespace `svc-mux`
 - `Dockerfile`: controller image build
 - `.github/workflows/ci.yml`: validation and GHCR image publishing
-- `gke-lb-setup.md`: GKE LoadBalancer setup guide
+- `docs/`: provider setup guides
 
 The Kubernetes API prefix is configurable through `api.prefix`. New installs default to `svc-mux.nowake.ai`.
 
@@ -57,7 +57,7 @@ defaultLoadBalancer:
   allocateLoadBalancerNodePorts: true
 ```
 
-The default chart values target GKE. See [gke-lb-setup.md](gke-lb-setup.md) for GKE architecture, static IP binding, and provider-specific options. For EKS/NLB deployments, see [aws-nlb-setup.md](aws-nlb-setup.md).
+The default chart values target GKE. See [docs/gke-lb-setup.md](docs/gke-lb-setup.md) for GKE architecture, static IP binding, and provider-specific options. For EKS/NLB deployments, see [docs/aws-nlb-setup.md](docs/aws-nlb-setup.md).
 
 If a multiplexer has no channels, the controller keeps a placeholder `101/TCP` port.
 

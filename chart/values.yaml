@@ -162,6 +162,7 @@ defaultLoadBalancer:
   labels: {}
   annotations:
     # Create a backend service-based external passthrough Network Load Balancer on GKE.
+    # Set this to an empty string in provider-specific values to omit it.
     cloud.google.com/l4-rbs: "enabled"
     # Optional: bind by GCP address resource name on GKE 1.29+.
     # networking.gke.io/load-balancer-ip-addresses: my-mux-ip
