@@ -94,6 +94,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
+      packages: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -151,6 +152,15 @@ jobs:
       - name: Package Helm chart
         run: helm package chart --destination dist
 
+      - name: Push Helm chart to GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "${GITHUB_TOKEN}" | helm registry login ghcr.io \
+            --username "${GITHUB_ACTOR}" \
+            --password-stdin
+          helm push "dist/svc-lb-mux-${GITHUB_REF_NAME#v}.tgz" oci://ghcr.io/nowakeai/charts
+
       - name: Append release artifacts
         run: |
           image_tag="${GITHUB_REF_NAME#v}"
@@ -159,7 +169,8 @@ jobs:
             echo "## Artifacts"
             echo
             printf -- '- Container images: `ghcr.io/%s:%s` and `ghcr.io/%s:%s`\n' "${GITHUB_REPOSITORY}" "${GITHUB_REF_NAME}" "${GITHUB_REPOSITORY}" "${image_tag}"
-            printf -- '- Helm chart: attached as `svc-lb-mux-%s.tgz`\n' "${image_tag}"
+            printf -- '- Helm chart OCI package: `oci://ghcr.io/nowakeai/charts/svc-lb-mux --version %s`\n' "${image_tag}"
+            printf -- '- Helm chart archive: attached as `svc-lb-mux-%s.tgz`\n' "${image_tag}"
           } >> dist/RELEASE_NOTES.md
 
       - name: Create GitHub release

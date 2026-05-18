@@ -69,13 +69,13 @@ The mux Service name does not have to be `mux`. A common production pattern is o
 
 ## Quick Start
 
-Builds from this repository publish images to `ghcr.io/nowakeai/svc-lb-mux`. Install the Helm chart from the repository root:
+Builds from this repository publish images and Helm charts to GHCR. Install the Helm chart from the OCI registry:
 
 ```console
-kubectl create namespace svc-mux
-helm install svc-mux ./chart \
+helm install svc-mux oci://ghcr.io/nowakeai/charts/svc-lb-mux \
+  --version 0.1.0 \
   --namespace svc-mux \
-  --set image.tag=0.1.0
+  --create-namespace
 ```
 
 The default chart creates a mux Service named `mux` in namespace `svc-mux`. These are defaults, not requirements.

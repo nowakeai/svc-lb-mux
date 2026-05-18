@@ -46,11 +46,11 @@ defaultLoadBalancer:
 Save those settings in an AWS-specific values file, for example `aws-values.yaml`, and install or upgrade:
 
 ```console
-helm upgrade --install svc-mux ./chart \
+helm upgrade --install svc-mux oci://ghcr.io/nowakeai/charts/svc-lb-mux \
+  --version 0.1.0 \
   --namespace svc-mux \
   --create-namespace \
-  --values aws-values.yaml \
-  --set image.tag=0.1.0
+  --values aws-values.yaml
 ```
 
 The chart skips annotations with empty values, so `cloud.google.com/l4-rbs: ""` removes the GKE default annotation from the rendered mux Service.

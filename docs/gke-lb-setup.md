@@ -54,10 +54,10 @@ defaultLoadBalancer:
 Install with defaults:
 
 ```console
-kubectl create namespace svc-mux
-helm install svc-mux ./chart \
+helm install svc-mux oci://ghcr.io/nowakeai/charts/svc-lb-mux \
+  --version 0.1.0 \
   --namespace svc-mux \
-  --set image.tag=0.1.0
+  --create-namespace
 
 kubectl get svc mux -n svc-mux -w
 ```
@@ -93,9 +93,10 @@ defaultLoadBalancer:
 ```
 
 ```console
-helm upgrade --install svc-mux ./chart \
+helm upgrade --install svc-mux oci://ghcr.io/nowakeai/charts/svc-lb-mux \
+  --version 0.1.0 \
   --namespace svc-mux \
-  --set image.tag=0.1.0 \
+  --create-namespace \
   --set defaultLoadBalancer.loadBalancerIP=$MUX_IP
 ```
 
@@ -112,9 +113,10 @@ defaultLoadBalancer:
 ```
 
 ```console
-helm upgrade --install svc-mux ./chart \
+helm upgrade --install svc-mux oci://ghcr.io/nowakeai/charts/svc-lb-mux \
+  --version 0.1.0 \
   --namespace svc-mux \
-  --set image.tag=0.1.0 \
+  --create-namespace \
   --set-string defaultLoadBalancer.annotations.networking\.gke\.io/load-balancer-ip-addresses=$ADDRESS_NAME \
   --set defaultLoadBalancer.loadBalancerClass=networking.gke.io/l4-regional-external
 ```
