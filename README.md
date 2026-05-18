@@ -100,7 +100,7 @@ defaultLoadBalancer:
   loadBalancerIP: ""
   loadBalancerClass: ""
   allocateLoadBalancerNodePorts: true
-  portRange: ""
+  portRange: "20000-21000"
   allocationConfigMapName: ""
 ```
 
@@ -155,7 +155,7 @@ For automatic assignment, configure a mux port range and request `auto` on the c
 
 ```yaml
 defaultLoadBalancer:
-  portRange: "30000-32767"
+  portRange: "20000-21000"
   allocationConfigMapName: "mux-port-allocations"
 ```
 

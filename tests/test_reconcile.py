@@ -219,6 +219,33 @@ class ReconcileHelperTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             process_channel_ports(channel, None, service_factory=FakeService)
 
+    def test_process_channel_ports_rejects_unnamed_port(self):
+        channel = channel_service(ports=[{"port": 80, "protocol": "TCP"}])
+
+        with self.assertRaisesRegex(ValueError, "ports must be named"):
+            process_channel_ports(channel, None, service_factory=FakeService)
+
+    def test_port_claim_collectors_skip_invalid_channels(self):
+        valid_auto = channel_service(
+            name="auto",
+            annotations={"svc-mux.nowake.ai/external-ports": "http:auto"},
+        )
+        valid_static = channel_service(name="static")
+        invalid_annotation = channel_service(
+            name="bad-port",
+            annotations={"svc-mux.nowake.ai/external-ports": "http:70000"},
+        )
+        invalid_name = channel_service(
+            name="bad-name",
+            annotations={"svc-mux.nowake.ai/external-ports": "grpc:8443"},
+        )
+        unnamed = channel_service(name="unnamed", ports=[{"port": 80}])
+
+        channels = [valid_auto, valid_static, invalid_annotation, invalid_name, unnamed]
+
+        self.assertEqual(collect_static_port_claims(channels), {(80, "TCP")})
+        self.assertEqual(len(collect_auto_allocation_keys(channels)), 1)
+
     def test_find_mux_port_conflicts_detects_duplicate_port_protocol(self):
         first = channel_service(name="api")
         second = channel_service(name="admin")

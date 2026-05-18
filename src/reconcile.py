@@ -79,6 +79,27 @@ def process_channel_ports(channel, memo, service_factory=Service, allocator=None
     return ports, annotation, service_factory(channel)
 
 
+def validate_declared_port_names(channel, explicit_ports=None):
+    ports = channel["spec"].get("ports", [])
+    unnamed_indexes = [str(index) for index, port in enumerate(ports) if not port.get("name")]
+    if unnamed_indexes:
+        raise ValueError(
+            "channel Service ports must be named; missing name at spec.ports index(es): "
+            + ", ".join(unnamed_indexes)
+        )
+
+    if explicit_ports is None:
+        return
+
+    declared_port_names = {port["name"] for port in ports}
+    unknown_names = sorted(set(explicit_ports) - declared_port_names)
+    if unknown_names:
+        raise ValueError(
+            f"{ANNOTATION_EXTERNAL_PORTS} references unknown port name(s): "
+            + ", ".join(unknown_names)
+        )
+
+
 def resolve_channel_ports(channel, allocator=None):
     """Resolve desired mux ports for a channel without Kubernetes API access."""
     ports = set()
@@ -87,16 +108,10 @@ def resolve_channel_ports(channel, allocator=None):
     explicit_ports = parse_external_ports_annotation(
         annotations.get(ANNOTATION_EXTERNAL_PORTS, "")
     )
+    validate_declared_port_names(channel, explicit_ports)
+
     channel_ns = channel["metadata"]["namespace"]
     channel_name = channel["metadata"]["name"]
-
-    declared_port_names = {port.get("name") for port in channel["spec"].get("ports", [])}
-    unknown_names = sorted(set(explicit_ports) - declared_port_names)
-    if unknown_names:
-        raise ValueError(
-            f"{ANNOTATION_EXTERNAL_PORTS} references unknown port name(s): "
-            + ", ".join(unknown_names)
-        )
 
     for port in channel["spec"]["ports"]:
         mux_port = resolve_channel_external_port(
@@ -105,18 +120,31 @@ def resolve_channel_ports(channel, allocator=None):
         protocol = port.get("protocol", "TCP")
         port_name_hash = port_hash(channel_ns, channel_name, port["name"])
         ports.add(MuxPort(port_name_hash, mux_port, protocol))
-        ports_for_annotation.append((port.get("name", "unnamed"), port["port"], mux_port))
+        ports_for_annotation.append((port["name"], port["port"], mux_port))
 
     return ports, format_channel_port_annotation(ports_for_annotation)
+
+
+def channel_port_claims(channel):
+    annotations = channel.get("metadata", {}).get("annotations", {})
+    explicit_ports = parse_external_ports_annotation(
+        annotations.get(ANNOTATION_EXTERNAL_PORTS, "")
+    )
+    validate_declared_port_names(channel, explicit_ports)
+    return explicit_ports
 
 
 def collect_auto_allocation_keys(channels):
     keys = set()
     for channel in channels:
-        annotations = channel.get("metadata", {}).get("annotations", {})
-        explicit_ports = parse_external_ports_annotation(
-            annotations.get(ANNOTATION_EXTERNAL_PORTS, "")
-        )
+        try:
+            explicit_ports = channel_port_claims(channel)
+        except ValueError as error:
+            logging.debug(
+                "Skipping invalid channel while collecting auto allocation keys: %s",
+                error,
+            )
+            continue
         for port in channel["spec"].get("ports", []):
             if explicit_ports.get(port.get("name")) == AUTO_PORT:
                 keys.add(PortAllocationRef.from_channel_port(channel, port).key)
@@ -127,10 +155,14 @@ def collect_static_port_claims(channels):
     """Collect non-auto desired mux port/protocol claims across channels."""
     claims = set()
     for channel in channels:
-        annotations = channel.get("metadata", {}).get("annotations", {})
-        explicit_ports = parse_external_ports_annotation(
-            annotations.get(ANNOTATION_EXTERNAL_PORTS, "")
-        )
+        try:
+            explicit_ports = channel_port_claims(channel)
+        except ValueError as error:
+            logging.debug(
+                "Skipping invalid channel while collecting static port claims: %s",
+                error,
+            )
+            continue
         for port in channel["spec"].get("ports", []):
             if explicit_ports.get(port.get("name")) == AUTO_PORT:
                 continue
