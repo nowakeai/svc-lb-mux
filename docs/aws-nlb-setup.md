@@ -102,6 +102,7 @@ metadata:
 spec:
   type: LoadBalancer
   loadBalancerClass: svc-mux.nowake.ai/mux.svc-mux
+  allocateLoadBalancerNodePorts: false
   selector:
     app: my-app
   ports:
@@ -110,7 +111,31 @@ spec:
       targetPort: 30303
 ```
 
-The controller mirrors the channel NodePorts and endpoints onto the mux Service.
+By default, the controller uses each channel `spec.ports[].port` as the mux external port and mirrors the channel endpoints onto the mux Service. Channel Services should normally set `allocateLoadBalancerNodePorts: false`; the mux Service is the only Service that needs provider-facing load balancer plumbing.
+
+To expose a different mux port without changing the channel Service port, add the configured API prefix annotation:
+
+```yaml
+metadata:
+  annotations:
+    svc-mux.nowake.ai/external-ports: "p2p:30304"
+```
+
+Each `(external port, protocol)` pair can be used by only one channel on the same mux. For automatic assignment, configure `defaultLoadBalancer.portRange` on the mux and request `auto` on the channel:
+
+```yaml
+defaultLoadBalancer:
+  portRange: "30000-32767"
+  allocationConfigMapName: "mux-port-allocations"
+```
+
+```yaml
+metadata:
+  annotations:
+    svc-mux.nowake.ai/external-ports: "p2p:auto"
+```
+
+Automatic assignments are stored in a ConfigMap so the mapping remains stable across controller restarts and GitOps re-application. Conflicts are reported with a `MuxPortConflict` event.
 
 ## Troubleshooting
 
@@ -131,6 +156,6 @@ Common issues:
 
 - The mux Service must use `loadBalancerClass: service.k8s.aws/nlb`; channel Services must use the Service LoadBalancer Multiplexer class.
 - For `ip` target type, pod IPs must be routable in the VPC through Amazon VPC CNI.
-- For `instance` target type, `allocateLoadBalancerNodePorts` must stay enabled or NodePorts must be allocated manually.
+- For `instance` target type on the mux Service, `allocateLoadBalancerNodePorts` must stay enabled or NodePorts must be allocated manually. Channel Services can still keep `allocateLoadBalancerNodePorts: false` because their NodePorts are not used for mux port selection.
 - For static public IPs, the NLB must be internet-facing and the EIP allocation count must match the selected subnets.
 - AWS Load Balancer Controller manages frontend and backend security groups in current versions. If targets are unhealthy, inspect the target group health reason, NLB security groups, backend security group rules, and subnet tags before manually adding broad security group rules.

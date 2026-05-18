@@ -18,6 +18,7 @@ make check-lock
 make lint
 make template
 make python-compile
+make test
 make docker-build
 ```
 
@@ -46,6 +47,7 @@ Do not commit generated `requirements.txt`. The `make requirements` target exist
 Before opening a PR, verify:
 
 - Python sources compile.
+- Unit tests pass.
 - Helm chart lints and renders.
 - Docker image builds locally when runtime dependencies or source layout changes.
 - Documentation examples match the chart defaults.

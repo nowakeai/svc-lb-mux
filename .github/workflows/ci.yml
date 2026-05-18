@@ -33,10 +33,13 @@ jobs:
         run: uv lock --check
 
       - name: Compile Python sources
-        run: python -m py_compile src/main.py src/webserver.py src/events.py src/utils.py src/alert.py
+        run: make python-compile
 
-      - name: Lint Helm chart
-        run: helm lint chart
+      - name: Run unit tests
+        run: make test
+
+      - name: Lint chart and Python code
+        run: make lint
 
       - name: Render Helm chart
         run: helm template svc-mux chart

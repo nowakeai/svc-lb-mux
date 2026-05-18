@@ -12,7 +12,7 @@ References:
 Service LoadBalancer Multiplexer uses two kinds of Services:
 
 - **Mux Service**: a selectorless `type: LoadBalancer` Service. GKE provisions the external L4 load balancer for this Service.
-- **Channel Services**: user Services that declare `spec.loadBalancerClass: <api-prefix>/<mux>[.<namespace>]`. The controller watches these Services and mirrors their allocated NodePorts and backend endpoints onto the mux Service.
+- **Channel Services**: user Services that declare `spec.loadBalancerClass: <api-prefix>/<mux>[.<namespace>]`. The controller watches these Services and mirrors their declared external ports and backend endpoints onto the mux Service.
 
 On GKE, a `type: LoadBalancer` Service creates Google Cloud load balancing resources. The chart defaults use the `cloud.google.com/l4-rbs: "enabled"` annotation, which asks GKE to create a backend service-based external passthrough Network Load Balancer.
 
@@ -39,6 +39,8 @@ defaultLoadBalancer:
   loadBalancerIP: ""
   loadBalancerClass: ""
   allocateLoadBalancerNodePorts: true
+  portRange: ""
+  allocationConfigMapName: ""
 ```
 
 Install with defaults:
@@ -169,6 +171,7 @@ metadata:
 spec:
   type: LoadBalancer
   loadBalancerClass: svc-mux.nowake.ai/mux.svc-mux
+  allocateLoadBalancerNodePorts: false
   selector:
     app: my-app
   ports:
@@ -177,7 +180,31 @@ spec:
       targetPort: 8080
 ```
 
-The channel still needs `type: LoadBalancer` so Kubernetes allocates NodePorts. The controller uses those NodePorts as externally reachable mux ports.
+The channel still uses `type: LoadBalancer` so Kubernetes accepts the custom `loadBalancerClass`, but the channel does not need NodePorts. By default, the controller uses each channel `spec.ports[].port` as the mux external port. Set `allocateLoadBalancerNodePorts: false` on channel Services to avoid unnecessary NodePort allocation.
+
+To expose a different mux port without changing the channel Service port, add the configured API prefix annotation:
+
+```yaml
+metadata:
+  annotations:
+    svc-mux.nowake.ai/external-ports: "http:8080"
+```
+
+Each `(external port, protocol)` pair can be used by only one channel on the same mux. For automatic assignment, configure `defaultLoadBalancer.portRange` on the mux and request `auto` on the channel:
+
+```yaml
+defaultLoadBalancer:
+  portRange: "30000-32767"
+  allocationConfigMapName: "mux-port-allocations"
+```
+
+```yaml
+metadata:
+  annotations:
+    svc-mux.nowake.ai/external-ports: "http:auto"
+```
+
+Automatic assignments are stored in a ConfigMap so the mapping remains stable across controller restarts and GitOps re-application.
 
 ## Troubleshooting
 
@@ -199,4 +226,6 @@ Common issues:
 - The static IP must be regional and in the same region as the GKE cluster.
 - Some load balancer annotations and Service fields are effectively immutable. Recreate the Service if changing load balancer mode.
 - Channel Service ports must be named. The controller rejects unnamed ports because it hashes `namespace/name/portName` into stable mux port names.
+- Channel Services should normally set `allocateLoadBalancerNodePorts: false`; the mux owns the provider load balancer ports.
+- If two channels on the same mux request the same external port and protocol, the controller emits a `MuxPortConflict` event and skips the conflicting channel mapping.
 - Firewall and health-check resources are managed by GKE for the Service load balancer. If traffic does not pass, inspect the generated forwarding rule, backend service, health check, and firewall rules in the Google Cloud project.

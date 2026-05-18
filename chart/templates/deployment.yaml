@@ -74,6 +74,8 @@ spec:
               value: "true"
             - name: DEBUG_WEB_PORT
               value: {{ .Values.service.port | quote }}
+            - name: DEBUG_WEB_ACTIONS_ENABLED
+              value: {{ .Values.debugWeb.actions.enabled | quote }}
             {{- else }}
             - name: DEBUG_WEB_ENABLED
               value: "false"

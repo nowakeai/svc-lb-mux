@@ -24,8 +24,43 @@ The Kubernetes API prefix is configurable through `api.prefix`. New installs def
 
 ## Concepts
 
+The naming is borrowed from electronic multiplexers: many input channels are carried through one shared output path. In this project, a mux is the shared load balancer owner, and channels are the user-facing Service interfaces attached to that mux.
+
 - **Multiplexer**: a selectorless `LoadBalancer` Service that owns the shared external load balancer.
 - **Channel**: a `LoadBalancer` Service that points at a multiplexer through `spec.loadBalancerClass`.
+
+```mermaid
+flowchart LR
+    subgraph external[External traffic]
+        client[Clients]
+        lb[Provider L4 Load Balancer]
+    end
+
+    subgraph control[Control plane]
+        controller[svc-lb-mux controller]
+    end
+
+    subgraph services[Kubernetes Services]
+        mux["Mux Service<br/>selectorless LoadBalancer"]
+        ch1["Channel Service A<br/>loadBalancerClass -> mux"]
+        ch2["Channel Service B<br/>loadBalancerClass -> mux"]
+    end
+
+    subgraph backends[Backend pods]
+        pod1[Pods A]
+        pod2[Pods B]
+    end
+
+    client --> lb --> mux
+    mux --> pod1
+    mux --> pod2
+    ch1 --> pod1
+    ch2 --> pod2
+
+    controller -. "ports + endpoints" .-> mux
+    controller -. "mux ingress status" .-> ch1
+    controller -. "mux ingress status" .-> ch2
+```
 
 ## Install
 
@@ -65,11 +100,13 @@ defaultLoadBalancer:
   loadBalancerIP: ""
   loadBalancerClass: ""
   allocateLoadBalancerNodePorts: true
+  portRange: ""
+  allocationConfigMapName: ""
 ```
 
 The default chart values target GKE. See [docs/gke-lb-setup.md](docs/gke-lb-setup.md) for GKE architecture, static IP binding, and provider-specific options. For EKS/NLB deployments, see [docs/aws-nlb-setup.md](docs/aws-nlb-setup.md).
 
-If a multiplexer has no channels, the controller keeps a placeholder `101/TCP` port.
+If a multiplexer has no channels, the controller keeps a placeholder `101/TCP` port. When GitOps manages the mux Service, that placeholder must not be treated as the desired runtime port list: the controller owns mux `spec.ports` and rewrites it from channel mappings. Configure GitOps to ignore mux `spec.ports`; see [docs/gitops.md](docs/gitops.md).
 
 ## Create A Channel Service
 
@@ -92,6 +129,7 @@ metadata:
 spec:
   type: LoadBalancer
   loadBalancerClass: svc-mux.nowake.ai/mux.svc-mux
+  allocateLoadBalancerNodePorts: false
   selector:
     app: my-app
   ports:
@@ -103,11 +141,35 @@ spec:
       targetPort: 443
 ```
 
-Kubernetes allocates `nodePort`s for the channel. The controller mirrors those ports and endpoints onto the multiplexer and syncs the multiplexer `status.loadBalancer.ingress` back to the channel Service.
+By default, the controller uses each channel `spec.ports[].port` as the mux external port, so channel Services do not need NodePorts. Set `allocateLoadBalancerNodePorts: false` on channels unless you have a provider-specific reason to keep NodePorts. The controller mirrors channel endpoints onto the multiplexer and syncs the multiplexer `status.loadBalancer.ingress` back to the channel Service.
+
+To expose a different mux port without changing the channel Service port, set `<api-prefix>/external-ports` with `portName:externalPort` pairs:
+
+```yaml
+metadata:
+  annotations:
+    svc-mux.nowake.ai/external-ports: "http:8080,https:8443"
+```
+
+For automatic assignment, configure a mux port range and request `auto` on the channel:
+
+```yaml
+defaultLoadBalancer:
+  portRange: "30000-32767"
+  allocationConfigMapName: "mux-port-allocations"
+```
+
+```yaml
+metadata:
+  annotations:
+    svc-mux.nowake.ai/external-ports: "http:auto"
+```
+
+The controller stores automatic assignments in a ConfigMap so mappings stay stable across restarts and Service re-application. The ConfigMap data contains an `allocations.json` entry with the mux reference, channel namespace/name, port name, protocol, assigned port, and source. Port names are the stable identity for mappings. Within one mux, each `(external port, protocol)` pair can be claimed by only one channel.
 
 ## Debug Web UI
 
-The debug UI is enabled by default on port `8080`, and authentication is enabled by default. If you do not provide a token, Helm generates one in a Secret.
+The debug UI is enabled by default on port `8080`, and authentication is enabled by default. If you do not provide a token, Helm generates one in a Secret. Active debug actions, such as TCP probes, are disabled by default; set `debugWeb.actions.enabled=true` only for trusted environments.
 
 Retrieve the generated token:
 
@@ -142,6 +204,7 @@ make check-lock
 make lint
 make template
 make python-compile
+make test
 make docker-build
 ```
 

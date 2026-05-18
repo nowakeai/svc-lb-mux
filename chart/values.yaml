@@ -124,6 +124,10 @@ debugWeb:
   # Enable debug web UI
   enabled: true
 
+  # Active debug actions such as TCP probes are disabled by default.
+  actions:
+    enabled: false
+
   # Authentication configuration for web UI
   # If auth.enabled is true, all requests must authenticate using HTTP Basic Auth
   auth:
@@ -173,3 +177,9 @@ defaultLoadBalancer:
   loadBalancerIP: ""
   loadBalancerClass: ""
   allocateLoadBalancerNodePorts: true
+  # Optional mux external port range for channel annotations that request auto allocation.
+  # Example channel annotation: svc-mux.nowake.ai/external-ports: "http:auto"
+  portRange: ""
+  # Optional ConfigMap name for stable auto-allocated port mappings.
+  # Defaults to <mux-name>-port-allocations when portRange is enabled.
+  allocationConfigMapName: ""

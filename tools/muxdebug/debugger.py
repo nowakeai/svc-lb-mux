@@ -6,7 +6,7 @@ import os
 import socket
 from typing import Dict, List, Optional, Tuple
 
-from .types import TestResult, P2PProtocol, PodInfo, PortRoute, MuxInfo, PeerInfo
+from .types import TestResult, P2PProtocol, PodInfo, PortRoute, MuxInfo
 from .k8s_client import KubeClient
 from .p2p_tester import P2PTester
 
@@ -655,6 +655,6 @@ class MuxDebugger:
 
         # Print summary
         print(f"\n{'=' * 100}")
-        print(f"Test Summary")
+        print("Test Summary")
         print(f"{'=' * 100}")
         print(f"Total mux services tested: {len(mux_list)}")

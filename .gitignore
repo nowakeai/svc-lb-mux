@@ -33,6 +33,7 @@ tools/rlpx-verify/go.sum
 testvalues.yaml
 todos.md
 .claude/
+ref_codes/
 
 # Development notes and tools (keep tools/ directory but ignore specific files)
 tools/NLB_LIBP2P_ISSUE.md

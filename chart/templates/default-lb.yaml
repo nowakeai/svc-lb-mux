@@ -11,6 +11,12 @@ metadata:
   annotations:
     helm.sh/resource-policy: keep
     {{ printf "%s/multiplexer" .Values.api.prefix | quote }}: "true"
+    {{- with .Values.defaultLoadBalancer.portRange }}
+    {{ printf "%s/port-range" $.Values.api.prefix | quote }}: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.defaultLoadBalancer.allocationConfigMapName }}
+    {{ printf "%s/allocation-configmap" $.Values.api.prefix | quote }}: {{ . | quote }}
+    {{- end }}
     {{- range $key, $value := .Values.defaultLoadBalancer.annotations }}
     {{- if $value }}
     {{ $key | quote }}: {{ $value | quote }}

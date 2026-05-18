@@ -252,7 +252,7 @@
                                                     Copy
                                                 </button>
                                                 <button @click="testChannel(ch, muxKey, muxData)"
-                                                        :disabled="testingChannels[ch.namespace + '/' + ch.name] === true"
+                                                        :disabled="!actionsEnabled || testingChannels[ch.namespace + '/' + ch.name] === true"
                                                         class="px-2 py-0.5 text-xs bg-yellow-600 hover:bg-yellow-500 rounded whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1">
                                                     <template x-if="testingChannels[ch.namespace + '/' + ch.name] === true">
                                                         <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -372,6 +372,7 @@
                 toast: { show: false, message: '', type: 'info' },
                 selectedNamespaces: [],
                 testingChannels: {}, // Track which channels are being tested
+                actionsEnabled: false,
                 selectedHostIndex: {}, // Track selected hostname index for each mux/channel (key: muxKey or channelKey)
 
                 // Get all hostnames from comma-separated list
@@ -512,6 +513,10 @@
                 },
 
                 async testChannel(channel, muxKey, muxData) {
+                    if (!this.actionsEnabled) {
+                        this.showToast('Debug actions are disabled', 'error');
+                        return;
+                    }
                     if (!channel.ports || channel.ports.length === 0) return;
                     const port = channel.ports[0];
                     const muxPort = port.mux_port || port.node_port;
@@ -555,9 +560,10 @@
 
                 async updateData() {
                     try {
-                        const [stateRes, topoRes] = await Promise.all([
+                        const [stateRes, topoRes, configRes] = await Promise.all([
                             fetch('/api/state'),
-                            fetch('/api/topology')
+                            fetch('/api/topology'),
+                            fetch('/api/config')
                         ]);
 
                         const state = await stateRes.json();
@@ -567,6 +573,7 @@
                         this.events = state.events;
 
                         this.topology = await topoRes.json();
+                        this.actionsEnabled = (await configRes.json()).actions_enabled === true;
 
                         // Initialize expanded state for new muxes
                         Object.keys(this.topology).forEach(key => {

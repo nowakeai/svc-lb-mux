@@ -1,7 +1,7 @@
 """P2P protocol testing functionality"""
 
 import hashlib
-import hmac
+import importlib.util
 import json
 import logging
 import secrets
@@ -14,17 +14,9 @@ from typing import Optional, Tuple
 from .types import TestResult, P2PProtocol, PeerInfo
 from .k8s_client import KubeClient
 
-# Try to import advanced P2P libraries
-try:
-    from eth_keys import keys
-    import rlp
-    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-    from cryptography.hazmat.backends import default_backend
-    from cryptography.hazmat.primitives import hashes
-    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-    HAS_ETH_KEYS = True
-except ImportError:
-    HAS_ETH_KEYS = False
+# Try to detect advanced P2P libraries. The handshake imports eth_keys lazily
+# because the Go helper is preferred when available.
+HAS_ETH_KEYS = importlib.util.find_spec("eth_keys") is not None
 
 # Check for Go RLPx helper
 SCRIPT_DIR = Path(__file__).parent.parent.resolve()
@@ -215,10 +207,10 @@ class P2PTester:
         # Try Go RLPx helper first if available and we have peer ID
         if HAS_RLPX_HELPER and expected_peer_id:
             try:
-                logger.info(f"Attempting RLPx handshake using Go helper")
+                logger.info("Attempting RLPx handshake using Go helper")
                 logger.debug(f"  Target: {hostname}:{port}")
                 logger.debug(f"  Expected peer ID: {expected_peer_id[:16]}...")
-                logger.debug(f"  Protocol: devp2p (Ethereum RLPx)")
+                logger.debug("  Protocol: devp2p (Ethereum RLPx)")
 
                 enode_url = f"enode://{expected_peer_id}@{hostname}:{port}"
                 success, remote_id, error = self._call_rlpx_helper(enode_url, timeout)
@@ -226,15 +218,15 @@ class P2PTester:
                 if success:
                     # Verify peer ID matches
                     if remote_id and remote_id == expected_peer_id:
-                        logger.info(f"✓ RLPx handshake completed successfully")
+                        logger.info("✓ RLPx handshake completed successfully")
                         logger.debug(f"  Remote peer ID: {remote_id[:16]}...")
-                        logger.debug(f"  Handshake method: Go helper (full ECIES)")
+                        logger.debug("  Handshake method: Go helper (full ECIES)")
                         return (
                             TestResult.SUCCESS,
                             f"RLPx handshake successful (peer ID verified: {expected_peer_id[:16]}...)"
                         )
                     else:
-                        logger.warning(f"⚠ Peer ID mismatch detected")
+                        logger.warning("⚠ Peer ID mismatch detected")
                         logger.debug(f"  Expected: {expected_peer_id[:16]}...")
                         logger.debug(f"  Received: {remote_id[:16] if remote_id else 'none'}...")
                         return (
@@ -243,12 +235,12 @@ class P2PTester:
                         )
                 else:
                     logger.debug(f"Go helper failed: {error}")
-                    logger.debug(f"Falling back to Python implementation...")
+                    logger.debug("Falling back to Python implementation...")
                     # Fall through to Python implementation
 
             except Exception as e:
                 logger.debug(f"Go helper exception: {e}")
-                logger.debug(f"Falling back to Python implementation...")
+                logger.debug("Falling back to Python implementation...")
                 # Fall through to Python implementation
 
         # Try Python advanced RLPx handshake if libraries available

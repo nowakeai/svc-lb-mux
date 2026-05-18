@@ -9,3 +9,6 @@ __pycache__
 chart/*.tgz
 tools/rlpx-verify/rlpx-verify
 requirements.txt
+tests
+todos.md
+.vscode
