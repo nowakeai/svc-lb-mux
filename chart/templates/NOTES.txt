@@ -1,0 +1,30 @@
+Thank you for installing Service LoadBalancer Multiplexer!
+
+Your Service LoadBalancer Multiplexer controller has been deployed in namespace: {{ .Release.Namespace }}
+
+{{- if .Values.defaultLoadBalancer.create }}
+
+Default Multiplexer Service:
+  Name: {{ .Values.defaultLoadBalancer.name }}
+  Namespace: {{ .Release.Namespace }}
+  LoadBalancerClass: {{ .Values.defaultLoadBalancer.loadBalancerClass }}
+
+To check the multiplexer service status:
+  kubectl get svc {{ .Values.defaultLoadBalancer.name }} -n {{ .Release.Namespace }}
+
+{{- end }}
+
+Next Steps:
+1. Wait for the multiplexer LoadBalancer to get an external IP/hostname:
+   kubectl get svc -n {{ .Release.Namespace }} -w
+
+2. Create channel services by setting:
+   - type: LoadBalancer
+   - loadBalancerClass: lb4-multiplexer.altlayer.io/{{ .Values.defaultLoadBalancer.name }}{{ if ne .Release.Namespace .Values.defaultLoadBalancer.name }}.{{ .Release.Namespace }}{{ end }}
+   - Ensure all ports have names
+
+3. View controller logs:
+   kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "lb4-multiplexer.name" . }} -f
+
+For more information, visit:
+  https://github.com/nowakeai/svc-lb-mux

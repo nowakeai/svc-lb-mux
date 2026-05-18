@@ -1,0 +1,10 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+*.pyo
+.ruff_cache
+.pytest_cache
+chart/*.tgz
+tools/rlpx-verify/rlpx-verify

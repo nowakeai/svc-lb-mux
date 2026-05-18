@@ -1,0 +1,48 @@
+# Patterns to ignore when building packages.
+# This supports shell glob matching, relative path matching, and
+# negation (prefixed with !). Only one pattern per line.
+.DS_Store
+# Common VCS dirs
+.git/
+.gitignore
+.bzr/
+.bzrignore
+.hg/
+.hgignore
+.svn/
+# Common backup files
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+# Various IDEs
+.project
+.idea/
+*.tmproj
+.vscode/
+
+# Test and development files
+out/
+test-local/
+testvalues.yaml
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+tools/
+
+# Python virtual environments and package management
+.venv/
+venv/
+env/
+.python-version
+pyproject.toml
+uv.lock
+poetry.lock
+Pipfile.lock

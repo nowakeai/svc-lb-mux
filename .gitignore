@@ -1,0 +1,36 @@
+# Helm chart build artifacts
+*.tgz
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+
+# Python virtual environments and package management
+.venv/
+venv/
+env/
+.python-version
+poetry.lock
+Pipfile.lock
+
+# Go build artifacts
+tools/rlpx-verify/rlpx-verify
+tools/rlpx-verify/go.sum
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.bak
+
+# Test and development files
+testvalues.yaml
+.claude/
+
+# Development notes and tools (keep tools/ directory but ignore specific files)
+tools/NLB_LIBP2P_ISSUE.md

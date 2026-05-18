@@ -1,0 +1,8 @@
+# helm upgrade --install lb4-multiplexer charts/lb4-multiplexer --values charts/lb4-multiplexer/test-local/values.yaml
+args:
+  - >-
+    pip install kopf kr8s slack_sdk -i https://mirrors.aliyun.com/pypi/simple 2>&1 >/dev/null;
+    kopf run --verbose --standalone
+    --all-namespaces
+    --liveness=http://0.0.0.0:8080/healthz
+    /scripts/main.py

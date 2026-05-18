@@ -1,0 +1,10 @@
+# Advanced P2P testing dependencies
+# Install with: pip install -r requirements-advanced.txt
+
+# Ethereum devp2p protocol
+eth-keys>=0.4.0
+rlp>=3.0.0
+cryptography>=41.0.0
+
+# libp2p protocol
+# Note: py-libp2p is complex, we'll use a lighter approach with direct protocol implementation

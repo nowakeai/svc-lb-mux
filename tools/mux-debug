@@ -1,0 +1,224 @@
+#!/usr/bin/env python3
+"""
+LB4 Multiplexer Debug Tool
+
+A unified tool for debugging and testing LB4 multiplexer services, channels, and P2P connections.
+
+Usage:
+    # List all mux services
+    mux-debug list [--context CONTEXT]
+
+    # Show routing graph for a mux
+    mux-debug graph <mux> [--namespace NAMESPACE] [--context CONTEXT]
+
+    # Test a specific pod
+    mux-debug test pod <pod> --namespace NAMESPACE [--context CONTEXT]
+
+    # Test all routes in a mux
+    mux-debug test mux <mux> [--namespace NAMESPACE] [--context CONTEXT]
+
+    # Test a specific channel service
+    mux-debug test channel <channel> --namespace NAMESPACE [--context CONTEXT]
+
+    # Get peer info from a pod
+    mux-debug peer-info <pod> --namespace NAMESPACE [--context CONTEXT]
+"""
+
+import argparse
+import logging
+import sys
+from typing import Optional, Tuple
+
+from muxdebug.types import TestResult
+from muxdebug.debugger import MuxDebugger
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
+
+def parse_resource_name(resource_arg: str, namespace_arg: Optional[str]) -> Tuple[str, str]:
+    """Parse resource name that may include namespace prefix.
+
+    Args:
+        resource_arg: Resource name, may be in format "namespace/name" or just "name"
+        namespace_arg: Namespace from --namespace flag (may be None)
+
+    Returns:
+        Tuple of (name, namespace)
+
+    Raises:
+        ValueError: If namespace cannot be determined
+    """
+    if "/" in resource_arg:
+        # Format: namespace/name
+        parts = resource_arg.split("/", 1)
+        return parts[1], parts[0]
+    else:
+        # Format: name (namespace must be provided via --namespace)
+        if namespace_arg is None:
+            raise ValueError(
+                f"Namespace not specified. Either provide namespace via --namespace or use format 'namespace/{resource_arg}'"
+            )
+        return resource_arg, namespace_arg
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="LB4 Multiplexer Debug Tool",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+
+    parser.add_argument(
+        "--context", default=None, help="Kubernetes context (default: current context)"
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable verbose logging"
+    )
+
+    subparsers = parser.add_subparsers(dest="command", help="Command to run")
+
+    # list command
+    subparsers.add_parser("list", help="List all mux services")
+
+    # graph command
+    graph_parser = subparsers.add_parser("graph", help="Show routing graph for a mux")
+    graph_parser.add_argument("mux", help="Mux service name or namespace/name")
+    graph_parser.add_argument(
+        "--namespace", "-n", help="Mux namespace (default: lb4, or auto-detect from name)"
+    )
+
+    # test command
+    test_parser = subparsers.add_parser("test", help="Test mux or pod")
+    test_subparsers = test_parser.add_subparsers(dest="test_type", help="Test type")
+
+    # test pod
+    test_pod_parser = test_subparsers.add_parser("pod", help="Test a specific pod")
+    test_pod_parser.add_argument("pod", help="Pod name or namespace/name")
+    test_pod_parser.add_argument(
+        "--namespace", "-n", help="Pod namespace (or auto-detect from name)"
+    )
+
+    # test mux
+    test_mux_parser = test_subparsers.add_parser("mux", help="Test all routes in a mux")
+    test_mux_parser.add_argument("mux", help="Mux service name or namespace/name")
+    test_mux_parser.add_argument(
+        "--namespace", "-n", help="Mux namespace (default: lb4, or auto-detect from name)"
+    )
+
+    # test all
+    test_subparsers.add_parser("all", help="Test all mux services in current context")
+
+    # test channel
+    test_channel_parser = test_subparsers.add_parser(
+        "channel", help="Test a channel service"
+    )
+    test_channel_parser.add_argument("channel", help="Channel service name or namespace/name")
+    test_channel_parser.add_argument(
+        "--namespace", "-n", help="Channel namespace (or auto-detect from name)"
+    )
+
+    # peer-info command
+    peer_parser = subparsers.add_parser("peer-info", help="Get peer info from a pod")
+    peer_parser.add_argument("pod", help="Pod name or namespace/name")
+    peer_parser.add_argument("--namespace", "-n", help="Pod namespace (or auto-detect from name)")
+
+    args = parser.parse_args()
+
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
+
+    if not args.command:
+        parser.print_help()
+        return 1
+
+    debugger = MuxDebugger(args.context)
+
+    try:
+        if args.command == "list":
+            mux_services = debugger.list_mux_services()
+            print(f"\n{'=' * 100}")
+            print(f"Mux Services (context: {debugger.context})")
+            print(f"{'=' * 100}")
+
+            if not mux_services:
+                print("No mux services found.")
+            else:
+                for mux in sorted(mux_services, key=lambda x: (x.namespace, x.name)):
+                    print(f"\n{mux.namespace}/{mux.name}")
+                    print(f"  LoadBalancer: {mux.lb_hostname or mux.lb_ip or 'N/A'}")
+                    if mux.external_dns:
+                        print(f"  External DNS: {mux.external_dns}")
+                    print(f"  Channels: {mux.total_channels}")
+
+        elif args.command == "graph":
+            mux_name, mux_namespace = parse_resource_name(args.mux, args.namespace or "lb4")
+            debugger.display_graph(mux_name, mux_namespace)
+
+        elif args.command == "test":
+            if args.test_type == "pod":
+                pod_name, pod_namespace = parse_resource_name(args.pod, args.namespace)
+                debugger.test_pod(pod_name, pod_namespace)
+            elif args.test_type == "mux":
+                mux_name, mux_namespace = parse_resource_name(args.mux, args.namespace or "lb4")
+                debugger.test_mux(mux_name, mux_namespace)
+            elif args.test_type == "all":
+                debugger.test_all_muxes()
+            elif args.test_type == "channel":
+                channel_name, channel_namespace = parse_resource_name(args.channel, args.namespace)
+                # Find any pod in the channel and test it
+                svc = debugger.client.get_resource(
+                    "service", channel_name, channel_namespace
+                )
+                if svc:
+                    endpoints = debugger.client.get_resource(
+                        "endpoints", channel_name, channel_namespace
+                    )
+                    pods = debugger._extract_pod_infos(endpoints) if endpoints else []
+                    if pods:
+                        debugger.test_pod(pods[0].name, pods[0].namespace)
+                    else:
+                        print(
+                            f"{TestResult.WARNING.value} No pods found for channel: {channel_namespace}/{channel_name}"
+                        )
+                else:
+                    logger.error(
+                        f"Channel service not found: {channel_namespace}/{channel_name}"
+                    )
+            else:
+                parser.print_help()
+
+        elif args.command == "peer-info":
+            pod_name, pod_namespace = parse_resource_name(args.pod, args.namespace)
+            peer_info = debugger.p2p_tester.get_peer_info(pod_name, pod_namespace)
+            if peer_info:
+                print(f"\n{'=' * 100}")
+                print(f"Peer Info: {pod_namespace}/{pod_name}")
+                print(f"{'=' * 100}")
+                print(f"Protocol: {peer_info.protocol.value}")
+                if peer_info.enode:
+                    print(f"Enode: {peer_info.enode}")
+                if peer_info.peer_id:
+                    print(f"Peer ID: {peer_info.peer_id}")
+                if peer_info.multiaddr:
+                    print(f"Multiaddr: {peer_info.multiaddr}")
+            else:
+                print(f"{TestResult.FAILURE.value} Could not get peer info")
+
+        return 0
+
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user")
+        return 130
+    except Exception as e:
+        logger.error(f"Error: {e}", exc_info=args.verbose)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

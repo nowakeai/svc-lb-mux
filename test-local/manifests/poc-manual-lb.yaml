@@ -1,0 +1,56 @@
+---
+# manual lb
+apiVersion: v1
+kind: Service
+metadata:
+  name: manual-lb
+  namespace: default
+  labels:
+    app: manual-lb
+spec:
+  ports:
+    - name: ch1
+      port: 9001
+      # targetPort: 9001
+    - name: ch2
+      port: 9002
+      # targetPort: 9002
+---
+# manual eps
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: manual-lb
+  namespace: default
+  labels:
+    app: manual-lb
+subsets:
+  - addresses:
+      - ip: 10.244.0.33
+    ports:
+      - name: ch1
+        port: 80
+        protocol: TCP
+  - addresses:
+      - ip: 10.244.0.34
+    ports:
+      - name: ch2
+        port: 80
+        protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: channel1-nameless
+  namespace: default
+  labels:
+    app: pod1
+spec:
+  selector:
+    app: pod1
+  type: LoadBalancer
+  loadBalancerClass: lb4-multiplexer.altlayer.io/mux
+  ports:
+    - protocol: TCP
+      port: 9001
+      targetPort: http

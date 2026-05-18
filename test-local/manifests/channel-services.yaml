@@ -1,0 +1,122 @@
+# Pod 1
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod1
+  namespace: default
+  labels:
+    app: pod1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pod1
+  template:
+    metadata:
+      labels:
+        app: pod1
+    spec:
+      containers:
+        - name: pod
+          image: python:3.12
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            limits:
+              cpu: 200m
+              memory: 500Mi
+          command: [python, -c]
+          args:
+            - |
+              from http.server import BaseHTTPRequestHandler, HTTPServer
+              import os
+              class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+                  def do_GET(self):
+                      self.send_response(200)
+                      self.send_header("Content-type", "text/plain")
+                      self.end_headers()
+                      self.wfile.write(os.getenv("HOSTNAME").encode() + b'\n')
+              server = HTTPServer(('0.0.0.0', 80), SimpleHTTPRequestHandler)
+              print("Starting server on http://0.0.0.0:80")
+              server.serve_forever()
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: channel1
+  namespace: default
+  labels:
+    app: pod1
+spec:
+  selector:
+    app: pod1
+  type: LoadBalancer
+  loadBalancerClass: lb4-multiplexer.altlayer.io/mux
+  ports:
+    - name: channel1
+      protocol: TCP
+      port: 9001
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod2
+  namespace: default
+  labels:
+    app: pod2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pod2
+  template:
+    metadata:
+      labels:
+        app: pod2
+    spec:
+      containers:
+        - name: pod
+          image: python:3.12
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            limits:
+              cpu: 200m
+              memory: 500Mi
+          command: [python, -c]
+          args:
+            - |
+              from http.server import BaseHTTPRequestHandler, HTTPServer
+              import os
+              class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+                  def do_GET(self):
+                      self.send_response(200)
+                      self.send_header("Content-type", "text/plain")
+                      self.end_headers()
+                      self.wfile.write(os.getenv("HOSTNAME").encode() + b'\n')
+              server = HTTPServer(('0.0.0.0', 80), SimpleHTTPRequestHandler)
+              print("Starting server on http://0.0.0.0:80")
+              server.serve_forever()
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: channel2
+  namespace: default
+  labels:
+    app: pod2
+spec:
+  selector:
+    app: pod2
+  type: LoadBalancer
+  loadBalancerClass: lb4-multiplexer.altlayer.io/mux
+  ports:
+    - name: channel2
+      protocol: TCP
+      port: 9002
+      targetPort: http
