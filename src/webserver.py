@@ -1,4 +1,4 @@
-"""Debug webserver for Service LoadBalancer Multiplexer using aiohttp"""
+"""Debug webserver for Service LoadBalancer Multiplexer using FastAPI."""
 
 import asyncio
 import base64
@@ -12,7 +12,9 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 
-import aiohttp.web
+import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 sys.path.append(os.path.dirname(__file__))
 
@@ -43,33 +45,17 @@ _state = {
 }
 
 
-def check_auth(request):
-    """Check if request has valid authentication using Basic Auth.
-
-    Uses HTTP Basic Authentication where:
-    - Username: can be anything (typically "admin" or just use the token)
-    - Password: must match AUTH_TOKEN
-
-    Args:
-        request: aiohttp request object
-
-    Returns:
-        bool: True if authenticated or auth is disabled, False otherwise
-    """
+def check_auth(request: Request):
+    """Check if request has valid HTTP Basic authentication."""
     if not AUTH_ENABLED:
         return True
 
-    # Check Authorization header for Basic auth
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Basic "):
         try:
-            # Decode base64 credentials
             credentials = base64.b64decode(auth_header[6:]).decode("utf-8")
-            # Format is "username:password", we only care about password (the token)
             if ":" in credentials:
-                username, password = credentials.split(":", 1)
-                # Check if password matches the token
-                # Username is ignored, can be anything
+                _, password = credentials.split(":", 1)
                 if hmac.compare_digest(password, AUTH_TOKEN):
                     return True
         except Exception:
@@ -78,33 +64,21 @@ def check_auth(request):
     return False
 
 
-@aiohttp.web.middleware
-async def auth_middleware(request, handler):
-    """Middleware to check authentication for all requests except health check.
+async def auth_middleware(request: Request, call_next):
+    """Check authentication for all requests except the health check."""
+    if request.url.path == "/healthz":
+        return await call_next(request)
 
-    Uses HTTP Basic Authentication. On failed authentication, adds a delay
-    to prevent brute force attacks.
-    """
-    # Skip auth for health check endpoint
-    if request.path == "/healthz":
-        return await handler(request)
-
-    # Check authentication
-    is_authenticated = check_auth(request)
-
-    if not is_authenticated:
-        # Anti brute-force: sleep 2 seconds on failed authentication
-        # This significantly slows down password guessing attacks
+    if not check_auth(request):
+        # Anti brute-force: sleep 2 seconds on failed authentication.
         await asyncio.sleep(2)
-
-        return aiohttp.web.Response(
-            text="Unauthorized - authentication required",
-            status=401,
+        return Response(
+            content="Unauthorized - authentication required",
+            status_code=401,
             headers={"WWW-Authenticate": 'Basic realm="Service LoadBalancer Multiplexer Debug UI"'},
         )
 
-    # Process the request
-    return await handler(request)
+    return await call_next(request)
 
 
 def get_annotation(annotations: dict, name: str, default=None):
@@ -402,251 +376,222 @@ def update_mux_state(
 
 
 # HTTP Handlers
-async def handle_index(request):
-    """Serve the main HTML page from file"""
-    html_path = Path(__file__).parent / "index.html"
-    return aiohttp.web.FileResponse(html_path)
+def create_app() -> FastAPI:
+    """Create the FastAPI debug web application."""
+    app = FastAPI(
+        title="Service LoadBalancer Multiplexer Debug UI",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
+    app.middleware("http")(auth_middleware)
 
+    @app.get("/")
+    async def handle_index():
+        """Serve the main HTML page from file."""
+        html_path = Path(__file__).parent / "index.html"
+        return FileResponse(html_path)
 
-async def handle_state(request):
-    """Serve current state as JSON"""
-    # Convert dict keys (tuples) to strings for JSON serialization.
-    with _state_lock:
-        state = {
-            "mux_services": {
-                f"{k[0]}/{k[1]}": dict(v)
-                for k, v in _state["mux_services"].items()
-            },
-            "channel_services": {
-                f"{k[0]}/{k[1]}": dict(v)
-                for k, v in _state["channel_services"].items()
-            },
-            "endpoints": {
-                f"{k[0]}/{k[1]}": dict(v)
-                for k, v in _state["endpoints"].items()
-            },
-            "events": list(_state["events"]),
-        }
-    return aiohttp.web.json_response(state)
-
-
-async def handle_topology(request):
-    """Serve topology graph data with mux external DNS"""
-    topology = {}
-    with _state_lock:
-        channel_services_snapshot = [
-            (key, dict(value))
-            for key, value in _state["channel_services"].items()
-        ]
-        mux_services_snapshot = {
-            key: dict(value) for key, value in _state["mux_services"].items()
-        }
-
-    for ch_key, ch in channel_services_snapshot:
-        mux_key = f"{ch['mux_namespace']}/{ch['mux_name']}"
-        mux_tuple_key = (ch["mux_namespace"], ch["mux_name"])
-
-        # Check if mux exists in state
-        mux_exists = mux_tuple_key in mux_services_snapshot
-
-        if mux_key not in topology:
-            # Get mux external DNS from mux_services
-            if mux_exists:
-                mux_info = mux_services_snapshot[mux_tuple_key]
-                topology[mux_key] = {
-                    "mux_external_dns": mux_info.get("external_dns_hostname"),
-                    "mux_external_ip": mux_info.get("status_ingress"),
-                    "mux_missing": False,
-                    "has_queue": mux_info.get("has_queue", False),
-                    "channels": [],
-                }
-            else:
-                # Mux doesn't exist - orphaned channel
-                logger.warning(
-                    f"Channel {ch['namespace']}/{ch['name']} references "
-                    f"non-existent mux {ch['mux_namespace']}/{ch['mux_name']}"
-                )
-                topology[mux_key] = {
-                    "mux_external_dns": None,
-                    "mux_external_ip": None,
-                    "mux_missing": True,  # Flag for frontend
-                    "has_queue": False,
-                    "channels": [],
-                }
-
-        topology[mux_key]["channels"].append(
-            {
-                "namespace": ch["namespace"],
-                "name": ch["name"],
-                "external_dns": ch["external_dns"],
-                "custom_dns": ch.get("custom_dns"),  # Channel's own DNS if any
-                "ports": ch["ports"],
+    @app.get("/api/state")
+    async def handle_state():
+        """Serve current state as JSON."""
+        with _state_lock:
+            state = {
+                "mux_services": {
+                    f"{k[0]}/{k[1]}": dict(v)
+                    for k, v in _state["mux_services"].items()
+                },
+                "channel_services": {
+                    f"{k[0]}/{k[1]}": dict(v)
+                    for k, v in _state["channel_services"].items()
+                },
+                "endpoints": {
+                    f"{k[0]}/{k[1]}": dict(v)
+                    for k, v in _state["endpoints"].items()
+                },
+                "events": list(_state["events"]),
             }
-        )
-    return aiohttp.web.json_response(topology)
+        return JSONResponse(state)
 
+    @app.get("/api/topology")
+    async def handle_topology():
+        """Serve topology graph data with mux external DNS."""
+        topology = {}
+        with _state_lock:
+            channel_services_snapshot = [
+                (key, dict(value))
+                for key, value in _state["channel_services"].items()
+            ]
+            mux_services_snapshot = {
+                key: dict(value) for key, value in _state["mux_services"].items()
+            }
 
-async def handle_test_tcp(request):
-    """Test TCP connection to a host:port"""
-    host = request.query.get("host")
-    port = request.query.get("port")
-    # Optional: get resource identifier for event logging (format: "namespace/name")
-    resource = request.query.get("resource", "unknown")
+        for _, ch in channel_services_snapshot:
+            mux_key = f"{ch['mux_namespace']}/{ch['mux_name']}"
+            mux_tuple_key = (ch["mux_namespace"], ch["mux_name"])
+            mux_exists = mux_tuple_key in mux_services_snapshot
 
-    if not host or not port:
-        return aiohttp.web.json_response(
-            {"success": False, "error": "Missing host or port"}, status=400
-        )
+            if mux_key not in topology:
+                if mux_exists:
+                    mux_info = mux_services_snapshot[mux_tuple_key]
+                    topology[mux_key] = {
+                        "mux_external_dns": mux_info.get("external_dns_hostname"),
+                        "mux_external_ip": mux_info.get("status_ingress"),
+                        "mux_missing": False,
+                        "has_queue": mux_info.get("has_queue", False),
+                        "channels": [],
+                    }
+                else:
+                    logger.warning(
+                        "Channel %s/%s references non-existent mux %s/%s",
+                        ch["namespace"],
+                        ch["name"],
+                        ch["mux_namespace"],
+                        ch["mux_name"],
+                    )
+                    topology[mux_key] = {
+                        "mux_external_dns": None,
+                        "mux_external_ip": None,
+                        "mux_missing": True,
+                        "has_queue": False,
+                        "channels": [],
+                    }
 
-    try:
-        port = int(port)
-    except ValueError:
-        return aiohttp.web.json_response(
-            {"success": False, "error": "Invalid port"}, status=400
-        )
-    if not 1 <= port <= 65535:
-        return aiohttp.web.json_response(
-            {"success": False, "error": "Port out of range"}, status=400
-        )
-
-    # Perform TCP connection test with timeout
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(3.0)  # 3 second timeout
-        result = sock.connect_ex((host, port))
-        sock.close()
-
-        if result == 0:
-            # Success - record as Normal event
-            record_event(
-                "Normal",
-                resource,
-                f"ConnectionTest: Successfully connected to {host}:{port}",
+            topology[mux_key]["channels"].append(
+                {
+                    "namespace": ch["namespace"],
+                    "name": ch["name"],
+                    "external_dns": ch["external_dns"],
+                    "custom_dns": ch.get("custom_dns"),
+                    "ports": ch["ports"],
+                }
             )
-            return aiohttp.web.json_response(
-                {"success": True, "message": f"Connected to {host}:{port}"}
+        return JSONResponse(topology)
+
+    @app.get("/api/test-tcp")
+    async def handle_test_tcp(host: str | None = None, port: str | None = None, resource: str = "unknown"):
+        """Test TCP connection to a host:port."""
+        if not host or not port:
+            return JSONResponse(
+                {"success": False, "error": "Missing host or port"}, status_code=400
             )
-        else:
-            # Connection failed - record as Warning event
+
+        try:
+            port_int = int(port)
+        except ValueError:
+            return JSONResponse(
+                {"success": False, "error": "Invalid port"}, status_code=400
+            )
+        if not 1 <= port_int <= 65535:
+            return JSONResponse(
+                {"success": False, "error": "Port out of range"}, status_code=400
+            )
+
+        try:
+            result = await asyncio.to_thread(_test_tcp_connection, host, port_int)
+            if result == 0:
+                record_event(
+                    "Normal",
+                    resource,
+                    f"ConnectionTest: Successfully connected to {host}:{port_int}",
+                )
+                return JSONResponse(
+                    {"success": True, "message": f"Connected to {host}:{port_int}"}
+                )
+
             record_event(
                 "Warning",
                 resource,
-                f"ConnectionTest: Connection failed to {host}:{port} (error code {result})",
+                f"ConnectionTest: Connection failed to {host}:{port_int} (error code {result})",
             )
-            return aiohttp.web.json_response(
+            return JSONResponse(
                 {
                     "success": False,
                     "error": f"Connection failed with error code {result}",
                 }
             )
-    except socket.gaierror as e:
-        # DNS resolution failed - record as Warning event
-        record_event(
-            "Warning",
-            resource,
-            f"ConnectionTest: DNS resolution failed for {host}:{port} - {str(e)}",
-        )
-        return aiohttp.web.json_response(
-            {"success": False, "error": f"DNS resolution failed: {e}"}
-        )
-    except socket.timeout:
-        # Connection timeout - record as Warning event
-        record_event(
-            "Warning", resource, f"ConnectionTest: Connection timeout to {host}:{port}"
-        )
-        return aiohttp.web.json_response(
-            {"success": False, "error": "Connection timeout"}
-        )
-    except Exception as e:
-        # Unexpected error - record as Error event
-        record_event(
-            "Error",
-            resource,
-            f"ConnectionTest: Unexpected error testing {host}:{port} - {str(e)}",
-        )
-        return aiohttp.web.json_response(
-            {"success": False, "error": f"Unexpected error: {e}"}
-        )
-
-
-async def handle_healthz(request):
-    """Health check endpoint for Kubernetes liveness/readiness probes"""
-    return aiohttp.web.json_response({"status": "ok"})
-
-
-def _run_webserver_in_thread(
-    port: int, loop: asyncio.AbstractEventLoop, shutdown_event: threading.Event
-):
-    """Run webserver in a separate thread with its own event loop
-
-    Args:
-        port: Port to run the webserver on
-        loop: Event loop for the webserver
-        shutdown_event: Threading event to signal shutdown
-    """
-    asyncio.set_event_loop(loop)
-
-    async def _start_server():
-        if DRYRUN_MODE:
-            logger.info("Running in DRYRUN mode - operator will be read-only")
-
-        if AUTH_ENABLED:
-            logger.info("Authentication enabled for debug webserver")
-
-        # Create aiohttp app with authentication middleware
-        app = aiohttp.web.Application(middlewares=[auth_middleware])
-
-        # Setup routes
-        app.router.add_get("/", handle_index)
-        app.router.add_get("/api/state", handle_state)
-        app.router.add_get("/api/topology", handle_topology)
-        app.router.add_get("/api/test-tcp", handle_test_tcp)
-        app.router.add_get(
-            "/healthz", handle_healthz
-        )  # Health check endpoint (no auth required)
-
-        # Run server
-        runner = aiohttp.web.AppRunner(app)
-        await runner.setup()
-        site = aiohttp.web.TCPSite(runner, "0.0.0.0", port)
-        await site.start()
-        logger.info(f"Debug webserver started on http://0.0.0.0:{port}")
-
-        # Keep the server running until shutdown is signaled
-        try:
-            # Check shutdown_event periodically instead of waiting indefinitely
-            while not shutdown_event.is_set():
-                await asyncio.sleep(0.1)
-        except asyncio.CancelledError:
-            logger.debug("Webserver task cancelled")
-        finally:
-            logger.info("Webserver shutting down...")
-            await runner.cleanup()
-            logger.debug("Webserver cleanup complete")
-
-    try:
-        loop.run_until_complete(_start_server())
-    except Exception as e:
-        logger.error(f"Webserver thread error: {e}", exc_info=True)
-    finally:
-        # Clean up the event loop
-        try:
-            # Cancel all remaining tasks
-            pending = asyncio.all_tasks(loop)
-            for task in pending:
-                task.cancel()
-            # Wait for tasks to complete cancellation
-            if pending:
-                loop.run_until_complete(
-                    asyncio.gather(*pending, return_exceptions=True)
-                )
-            loop.close()
+        except socket.gaierror as e:
+            record_event(
+                "Warning",
+                resource,
+                f"ConnectionTest: DNS resolution failed for {host}:{port_int} - {str(e)}",
+            )
+            return JSONResponse(
+                {"success": False, "error": f"DNS resolution failed: {e}"}
+            )
+        except socket.timeout:
+            record_event(
+                "Warning", resource, f"ConnectionTest: Connection timeout to {host}:{port_int}"
+            )
+            return JSONResponse(
+                {"success": False, "error": "Connection timeout"}
+            )
         except Exception as e:
-            logger.debug(f"Error during event loop cleanup: {e}")
+            record_event(
+                "Error",
+                resource,
+                f"ConnectionTest: Unexpected error testing {host}:{port_int} - {str(e)}",
+            )
+            return JSONResponse(
+                {"success": False, "error": f"Unexpected error: {e}"}
+            )
+
+    @app.get("/healthz")
+    async def handle_healthz():
+        """Health check endpoint for Kubernetes liveness/readiness probes."""
+        return JSONResponse({"status": "ok"})
+
+    return app
+
+
+def _test_tcp_connection(host: str, port: int) -> int:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.settimeout(3.0)
+        return sock.connect_ex((host, port))
+    finally:
+        sock.close()
+
+
+async def _serve_until_shutdown(port: int, shutdown_event: threading.Event):
+    if DRYRUN_MODE:
+        logger.info("Running in DRYRUN mode - operator will be read-only")
+
+    if AUTH_ENABLED:
+        logger.info("Authentication enabled for debug webserver")
+
+    config = uvicorn.Config(
+        create_app(),
+        host="0.0.0.0",
+        port=port,
+        access_log=False,
+        log_config=None,
+    )
+    server = uvicorn.Server(config)
+
+    async def _monitor_shutdown():
+        while not shutdown_event.is_set():
+            await asyncio.sleep(0.1)
+        server.should_exit = True
+
+    monitor_task = asyncio.create_task(_monitor_shutdown())
+    try:
+        await server.serve()
+    finally:
+        monitor_task.cancel()
+        await asyncio.gather(monitor_task, return_exceptions=True)
+
+
+def _run_webserver_in_thread(port: int, shutdown_event: threading.Event):
+    """Run the FastAPI webserver in a separate thread."""
+    try:
+        asyncio.run(_serve_until_shutdown(port, shutdown_event))
+    except Exception as e:
+        logger.error("Webserver thread error: %s", e, exc_info=True)
 
 
 def start_webserver_thread(port: int = 8080):
-    """Start the debug webserver in a separate daemon thread
+    """Start the debug webserver in a separate daemon thread.
 
     Args:
         port: Port to run the webserver on
@@ -654,51 +599,27 @@ def start_webserver_thread(port: int = 8080):
     Returns:
         tuple: (threading.Thread, threading.Event) - The webserver thread and shutdown event
     """
-    # Create a new event loop for the webserver thread
-    loop = asyncio.new_event_loop()
-
-    # Create shutdown event for graceful termination
     shutdown_event = threading.Event()
-
-    # Create and start the thread
     thread = threading.Thread(
         target=_run_webserver_in_thread,
-        args=(port, loop, shutdown_event),
+        args=(port, shutdown_event),
         daemon=True,
         name="WebserverThread",
     )
     thread.start()
     logger.info("Webserver thread started (daemon)")
-
     return thread, shutdown_event
 
 
 async def start_webserver_async(port: int = 8080, memo=None):
-    """Start the debug webserver using aiohttp (async version)
+    """Start the debug webserver as an asyncio task.
 
-    NOTE: This function is deprecated. Use start_webserver_thread() instead
-    for better isolation.
+    NOTE: start_webserver_thread() remains the preferred production entrypoint
+    because it isolates the webserver from the kopf event loop.
     """
-    if DRYRUN_MODE:
-        logger.info("Running in DRYRUN mode - operator will be read-only")
-
-    # Create aiohttp app
-    app = aiohttp.web.Application()
-
-    # Setup routes
-    app.router.add_get("/", handle_index)
-    app.router.add_get("/api/state", handle_state)
-    app.router.add_get("/api/topology", handle_topology)
-    app.router.add_get("/api/test-tcp", handle_test_tcp)
-
-    # Run server in background
-    runner = aiohttp.web.AppRunner(app)
-    await runner.setup()
-    site = aiohttp.web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-    logger.info(f"Debug webserver started on http://0.0.0.0:{port}")
-
-    return runner
+    shutdown_event = threading.Event()
+    task = asyncio.create_task(_serve_until_shutdown(port, shutdown_event))
+    return task, shutdown_event
 
 
 # Export functions for use in main.py

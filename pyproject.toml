@@ -6,7 +6,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 keywords = ["kubernetes", "loadbalancer", "networking", "controller", "cloud-native"]
 dependencies = [
-  "aiohttp>=3.13.3",
+  "fastapi>=0.124.4",
+  "uvicorn>=0.38.0",
   "kopf>=1.38.0",
   "kr8s>=0.20.14",
   "slack-sdk>=3.39.0",
