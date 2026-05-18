@@ -49,7 +49,7 @@ spec:
   selector:
     app: pod1
   type: LoadBalancer
-  loadBalancerClass: lb4-multiplexer.altlayer.io/mux
+  loadBalancerClass: svc-mux.nowake.ai/mux
   ports:
     - protocol: TCP
       port: 9001

@@ -1,3 +1,10 @@
+api:
+  # Primary annotation/finalizer/loadBalancerClass prefix used for new resources.
+  prefix: svc-mux.nowake.ai
+  # Additional prefixes accepted for compatibility with existing resources.
+  legacyPrefixes:
+    - lb4-multiplexer.altlayer.io
+
 replicaCount: 1
 
 image:
@@ -157,7 +164,6 @@ defaultLoadBalancer:
   name: mux
   labels: {}
   annotations:
-    lb4-multiplexer.altlayer.io/multiplexer: "true"
     # https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.9/guide/service/nlb
     service.beta.kubernetes.io/aws-load-balancer-type: external
     service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing

@@ -10,6 +10,7 @@ metadata:
     {{- end }}
   annotations:
     helm.sh/resource-policy: keep
+    {{ printf "%s/multiplexer" .Values.api.prefix | quote }}: "true"
     {{- with .Values.defaultLoadBalancer.annotations }}
     {{- . | toYaml | nindent 4 }}
     {{- end }}

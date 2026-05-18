@@ -26,6 +26,16 @@ logger = logging.getLogger(__name__)
 # Dryrun mode flag - operator will be read-only, no write operations to k8s
 DRYRUN_MODE = os.environ.get("DRYRUN_MODE", "").lower() in ("true", "1", "yes", "on")
 
+API_PREFIX = os.environ.get("API_PREFIX", "svc-mux.nowake.ai").strip() or "svc-mux.nowake.ai"
+LEGACY_API_PREFIXES = tuple(
+    prefix.strip()
+    for prefix in os.environ.get(
+        "LEGACY_API_PREFIXES", "lb4-multiplexer.altlayer.io"
+    ).split(",")
+    if prefix.strip() and prefix.strip() != API_PREFIX
+)
+API_PREFIXES = (API_PREFIX, *LEGACY_API_PREFIXES)
+
 # Authentication token from environment variable
 # If set, all web UI requests must provide this token
 AUTH_TOKEN = os.environ.get("DEBUG_WEB_AUTH_TOKEN", os.environ.get("AUTH_TOKEN", ""))
@@ -103,6 +113,14 @@ async def auth_middleware(request, handler):
 
     # Process the request
     return await handler(request)
+
+
+def get_annotation(annotations: dict, name: str, default=None):
+    for prefix in API_PREFIXES:
+        key = f"{prefix}/{name}"
+        if key in annotations:
+            return annotations[key]
+    return default
 
 
 def record_event(event_type: str, resource: str, message: str):
@@ -340,7 +358,7 @@ def update_mux_state(
             # Parse mux port mapping from annotations
             # Format: "port1:8080->30001,port2:8081->30002" or "port1:30001,port2:30002"
             # mapping channel port to mux nodePort
-            mux_ports_anno = annotations.get("lb4-multiplexer.altlayer.io/ports", "")
+            mux_ports_anno = get_annotation(annotations, "ports", "")
             mux_port_map = {}
             if mux_ports_anno:
                 for mapping in mux_ports_anno.split(","):

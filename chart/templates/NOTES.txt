@@ -20,7 +20,7 @@ Next Steps:
 
 2. Create channel services by setting:
    - type: LoadBalancer
-   - loadBalancerClass: lb4-multiplexer.altlayer.io/{{ .Values.defaultLoadBalancer.name }}{{ if ne .Release.Namespace .Values.defaultLoadBalancer.name }}.{{ .Release.Namespace }}{{ end }}
+   - loadBalancerClass: {{ .Values.api.prefix }}/{{ .Values.defaultLoadBalancer.name }}{{ if ne .Release.Namespace .Values.defaultLoadBalancer.name }}.{{ .Release.Namespace }}{{ end }}
    - Ensure all ports have names
 
 3. View controller logs:

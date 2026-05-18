@@ -9,7 +9,7 @@ The repository is split into application code and deployment packaging:
 - `Dockerfile`: controller image build
 - `.github/workflows/ci.yml`: validation and GHCR image publishing
 
-The Kubernetes API prefix is intentionally kept as `lb4-multiplexer.altlayer.io` for compatibility with existing Services.
+The Kubernetes API prefix is configurable through `api.prefix`. New installs default to `svc-mux.nowake.ai`; existing prefixes can be kept in `api.legacyPrefixes` for migration compatibility.
 
 ## Concepts
 
@@ -29,6 +29,18 @@ helm install service-loadbalancer-multiplexer ./chart \
 
 By default the chart creates a multiplexer Service named `mux` in the release namespace.
 
+## API Prefix
+
+New resources use `svc-mux.nowake.ai` by default:
+
+```yaml
+api:
+  prefix: svc-mux.nowake.ai
+  legacyPrefixes: []
+```
+
+During migration, put any existing prefix in `api.legacyPrefixes`. The controller writes new annotations and finalizers with `api.prefix`, while reads and `loadBalancerClass` parsing accept both the primary prefix and legacy prefixes.
+
 ## Default LoadBalancer
 
 Customize the default multiplexer through `chart/values.yaml`:
@@ -39,7 +51,6 @@ defaultLoadBalancer:
   name: mux
   labels: {}
   annotations:
-    lb4-multiplexer.altlayer.io/multiplexer: "true"
     service.beta.kubernetes.io/aws-load-balancer-type: external
     service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
     service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
@@ -55,7 +66,7 @@ If a multiplexer has no channels, the controller keeps a placeholder `101/TCP` p
 A channel Service must:
 
 1. Set `spec.type` to `LoadBalancer`.
-2. Set `spec.loadBalancerClass` to `lb4-multiplexer.altlayer.io/<mux>[.<namespace>]`.
+2. Set `spec.loadBalancerClass` to `<api-prefix>/<mux>[.<namespace>]`. The default prefix is `svc-mux.nowake.ai`.
 3. Name every port.
 
 Example:
@@ -70,7 +81,7 @@ metadata:
     external-dns.alpha.kubernetes.io/hostname: my-hostname.com
 spec:
   type: LoadBalancer
-  loadBalancerClass: lb4-multiplexer.altlayer.io/mux.lb4
+  loadBalancerClass: svc-mux.nowake.ai/mux.lb4
   selector:
     app: my-app
   ports:
@@ -110,7 +121,7 @@ For external access, enable `debugWeb.ingress` and use TLS.
 helm uninstall --namespace lb4 service-loadbalancer-multiplexer
 ```
 
-The chart keeps the default LoadBalancer Service via `helm.sh/resource-policy: keep`. To delete managed Services later, remove the finalizer `lb4-multiplexer.altlayer.io/finalizer` first.
+The chart keeps the default LoadBalancer Service via `helm.sh/resource-policy: keep`. To delete managed Services later, remove the configured API finalizer, for example `svc-mux.nowake.ai/finalizer`.
 
 ## Development
 

@@ -4,7 +4,7 @@ metadata:
   name: mux
   namespace: default
   annotations:
-    lb4-multiplexer.altlayer.io/multiplexer: "true"
+    svc-mux.nowake.ai/multiplexer: "true"
 spec:
   type: LoadBalancer
   ports:
