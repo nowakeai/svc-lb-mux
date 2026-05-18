@@ -176,6 +176,7 @@ Open <http://localhost:8080> and use any username with the token as the password
 
 - [GKE LoadBalancer setup](docs/gke-lb-setup.md)
 - [AWS NLB setup](docs/aws-nlb-setup.md)
+- [Controller design and features](docs/controller.md)
 - [GitOps compatibility](docs/gitops.md)
 - [GKE pressure test report](docs/gke-pressure-test-report.md)
 - [Roadmap](ROADMAP.md)
