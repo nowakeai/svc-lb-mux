@@ -4,7 +4,7 @@ Your Service LoadBalancer Multiplexer controller has been deployed in namespace:
 
 {{- if .Values.defaultLoadBalancer.create }}
 
-Default Multiplexer Service:
+Chart-created Multiplexer Service:
   Name: {{ .Values.defaultLoadBalancer.name }}
   Namespace: {{ .Release.Namespace }}
   LoadBalancerClass: {{ .Values.defaultLoadBalancer.loadBalancerClass }}
@@ -21,6 +21,7 @@ Next Steps:
 2. Create channel services by setting:
    - type: LoadBalancer
    - loadBalancerClass: {{ .Values.api.prefix }}/{{ .Values.defaultLoadBalancer.name }}{{ if ne .Release.Namespace .Values.defaultLoadBalancer.name }}.{{ .Release.Namespace }}{{ end }}
+   - Use your chosen mux Service name and namespace if you override the chart defaults
    - Ensure all ports have names
 
 3. View controller logs:

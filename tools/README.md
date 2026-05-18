@@ -10,14 +10,15 @@ python -m venv .venv
 pip install -r tools/requirements-advanced.txt
 ```
 
-## Naming Defaults
+## Naming Defaults And Conventions
 
-The tool follows the project naming defaults:
+The tool follows the chart defaults when a command needs a mux namespace or API prefix:
 
 - Default mux namespace: `svc-mux`
 - Default API prefix: `svc-mux.nowake.ai`
-- Default mux Service name: `mux`
-- Additional mux Services should use names such as `mux2`, `mux3`, or another `muxN` form.
+- Default mux Service name in examples: `mux`
+
+These are not naming requirements. For real deployments, prefer one mux per namespace or project. Use a semantic mux name when it helps operators, or reuse `mux` across namespaces and pass the namespace explicitly.
 
 Override the API prefix for a non-default deployment:
 
@@ -33,7 +34,7 @@ List mux Services:
 ./tools/mux-debug list
 ```
 
-Show the routing graph for the default mux:
+Show the routing graph for the chart default mux:
 
 ```console
 ./tools/mux-debug graph mux -n svc-mux
@@ -85,7 +86,7 @@ The tool is read-only. It uses Kubernetes Services and Endpoints to derive:
 ## Troubleshooting Checklist
 
 - Confirm the mux Service has the configured API prefix annotation, for example `svc-mux.nowake.ai/multiplexer: "true"`.
-- Confirm each channel Service uses `spec.loadBalancerClass: svc-mux.nowake.ai/mux.svc-mux` or the prefix configured for your deployment.
+- Confirm each channel Service uses `spec.loadBalancerClass: <api-prefix>/<mux>[.<namespace>]`, for example `svc-mux.nowake.ai/mux.svc-mux` with the chart defaults.
 - Confirm every channel Service port has a name.
 - Confirm the mux Service has the expected external IP or hostname.
 - Confirm Endpoints exist for the channel Service and include ready pod addresses.

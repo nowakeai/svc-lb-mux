@@ -32,7 +32,7 @@ helm install svc-mux ./chart \
   --set image.tag=latest
 ```
 
-By default the chart creates a multiplexer Service named `mux` in namespace `svc-mux`. Additional mux Services should use names like `mux2`, `mux3`, or another `muxN` form.
+The chart defaults create one multiplexer Service named `mux` in namespace `svc-mux`. These are only defaults. In production, choose names that match your ownership model: commonly one mux per namespace or project, either with a semantic name such as `payments` or `rollup-p2p`, or simply `mux` in each project namespace and let the namespace disambiguate it.
 
 ## API Prefix
 
@@ -70,10 +70,10 @@ If a multiplexer has no channels, the controller keeps a placeholder `101/TCP` p
 A channel Service must:
 
 1. Set `spec.type` to `LoadBalancer`.
-2. Set `spec.loadBalancerClass` to `<api-prefix>/<mux>[.<namespace>]`. The default prefix is `svc-mux.nowake.ai`.
+2. Set `spec.loadBalancerClass` to `<api-prefix>/<mux>[.<namespace>]`. The default prefix is `svc-mux.nowake.ai`; `<mux>` and `<namespace>` are the actual multiplexer Service name and namespace you choose.
 3. Name every port.
 
-Example:
+Example using the chart defaults:
 
 ```yaml
 apiVersion: v1

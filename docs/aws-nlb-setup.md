@@ -28,7 +28,7 @@ The traffic path is:
 
 ## Recommended NLB Values
 
-For EKS with `ip` targets, configure the default mux Service like this:
+For EKS with `ip` targets, configure the chart-created mux Service like this. The Service name `mux` is only the chart default; use a semantic name or a project namespace if that fits your deployment better:
 
 ```yaml
 defaultLoadBalancer:
@@ -91,7 +91,7 @@ Instance mode routes NLB traffic to node ports first, then kube-proxy forwards t
 
 ## Channel Services
 
-Channel Services should use the mux controller load balancer class, not `service.k8s.aws/nlb`:
+Channel Services should use the mux controller load balancer class, not `service.k8s.aws/nlb`. Replace `mux.svc-mux` with the mux Service name and namespace you chose:
 
 ```yaml
 apiVersion: v1

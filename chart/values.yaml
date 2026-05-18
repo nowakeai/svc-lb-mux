@@ -158,6 +158,7 @@ debugWeb:
 
 defaultLoadBalancer:
   create: true
+  # Default mux Service name. Override this with a semantic name when useful.
   name: mux
   labels: {}
   annotations:

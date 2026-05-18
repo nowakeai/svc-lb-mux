@@ -27,7 +27,7 @@ The mux Service has no selector. The controller manages its ports and Endpoints 
 
 ## Default Chart Configuration
 
-The default `chart/values.yaml` mux configuration is GKE-oriented:
+The default `chart/values.yaml` mux configuration is GKE-oriented. The Service name `mux` and namespace `svc-mux` are chart defaults, not required names:
 
 ```yaml
 defaultLoadBalancer:
@@ -158,7 +158,7 @@ Internal and external Services use different Google Cloud load balancing resourc
 
 ## Channel Services
 
-After the mux is ready, channel Services use the configured API prefix. With the default prefix and a mux named `mux` in namespace `svc-mux`:
+After the mux is ready, channel Services use the configured API prefix and the actual mux Service reference. With the chart defaults, the mux Service is `mux` in namespace `svc-mux`:
 
 ```yaml
 apiVersion: v1
