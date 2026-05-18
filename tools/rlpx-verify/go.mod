@@ -1,4 +1,4 @@
-module github.com/altlayer/helm-charts/charts/lb4-multiplexer/tools/rlpx-verify
+module github.com/nowakeai/svc-lb-mux/tools/rlpx-verify
 
 go 1.24.0
 

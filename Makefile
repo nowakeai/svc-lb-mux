@@ -37,7 +37,7 @@ lint:
 	@helm lint $(CHART_DIR)
 
 template:
-	@helm template service-loadbalancer-multiplexer $(CHART_DIR)
+	@helm template svc-mux $(CHART_DIR)
 
 test-requirements:
 	@tmpdir=$$(mktemp -d); \

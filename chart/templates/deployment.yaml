@@ -1,14 +1,14 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "lb4-multiplexer.fullname" . }}
+  name: {{ include "svc-lb-mux.fullname" . }}
   labels:
-    {{- include "lb4-multiplexer.labels" . | nindent 4 }}
+    {{- include "svc-lb-mux.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "lb4-multiplexer.selectorLabels" . | nindent 6 }}
+      {{- include "svc-lb-mux.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -16,7 +16,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "lb4-multiplexer.labels" . | nindent 8 }}
+        {{- include "svc-lb-mux.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -25,11 +25,11 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "lb4-multiplexer.serviceAccountName" . }}
+      serviceAccountName: {{ include "svc-lb-mux.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ .Chart.Name }}
+        - name: {{ include "svc-lb-mux.name" . }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -82,7 +82,7 @@ spec:
             - name: DEBUG_WEB_AUTH_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ if .Values.debugWeb.auth.existingSecret }}{{ .Values.debugWeb.auth.existingSecret }}{{ else }}{{ include "lb4-multiplexer.fullname" . }}-debug-token{{ end }}
+                  name: {{ if .Values.debugWeb.auth.existingSecret }}{{ .Values.debugWeb.auth.existingSecret }}{{ else }}{{ include "svc-lb-mux.fullname" . }}-debug-token{{ end }}
                   key: {{ .Values.debugWeb.auth.existingSecretKey }}
             {{- end }}
             {{- if .Values.env }}

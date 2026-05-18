@@ -1,11 +1,11 @@
 # Service LoadBalancer Multiplexer
 
-Service LoadBalancer Multiplexer is a Kubernetes controller that lets multiple `LoadBalancer` Services share one Layer 4 LoadBalancer.
+Service LoadBalancer Multiplexer is a Kubernetes controller that lets multiple `LoadBalancer` Services share one Layer 4 load balancer.
 
 The repository is split into application code and deployment packaging:
 
 - `scripts/`: controller and debug UI source code
-- `chart/`: Helm chart
+- `chart/`: Helm chart, installed by default as release `svc-mux` in namespace `svc-mux`
 - `Dockerfile`: controller image build
 - `.github/workflows/ci.yml`: validation and GHCR image publishing
 - `gke-lb-setup.md`: GKE LoadBalancer setup guide
@@ -22,13 +22,13 @@ The Kubernetes API prefix is configurable through `api.prefix`. New installs def
 Builds from this repo publish the controller image to `ghcr.io/nowakeai/svc-lb-mux`. Install the chart from the repository root:
 
 ```console
-kubectl create namespace lb4
-helm install service-loadbalancer-multiplexer ./chart \
-  --namespace lb4 \
+kubectl create namespace svc-mux
+helm install svc-mux ./chart \
+  --namespace svc-mux \
   --set image.tag=latest
 ```
 
-By default the chart creates a multiplexer Service named `mux` in the release namespace.
+By default the chart creates a multiplexer Service named `mux` in namespace `svc-mux`. Additional mux Services should use names like `mux2`, `mux3`, or another `muxN` form.
 
 ## API Prefix
 
@@ -81,7 +81,7 @@ metadata:
     external-dns.alpha.kubernetes.io/hostname: my-hostname.com
 spec:
   type: LoadBalancer
-  loadBalancerClass: svc-mux.nowake.ai/mux.lb4
+  loadBalancerClass: svc-mux.nowake.ai/mux.svc-mux
   selector:
     app: my-app
   ports:
@@ -102,13 +102,13 @@ The debug UI is enabled by default on port `8080`, and authentication is enabled
 Retrieve the generated token:
 
 ```console
-kubectl get secret -n lb4 service-loadbalancer-multiplexer-debug-token -o jsonpath='{.data.token}' | base64 -d
+kubectl get secret -n svc-mux svc-mux-debug-token -o jsonpath='{.data.token}' | base64 -d
 ```
 
 Port-forward locally:
 
 ```console
-kubectl port-forward -n lb4 deployment/service-loadbalancer-multiplexer 8080:8080
+kubectl port-forward -n svc-mux deployment/svc-mux 8080:8080
 ```
 
 Then open <http://localhost:8080> and use any username with the token as the password.
@@ -118,7 +118,7 @@ For external access, enable `debugWeb.ingress` and use TLS.
 ## Uninstall
 
 ```console
-helm uninstall --namespace lb4 service-loadbalancer-multiplexer
+helm uninstall --namespace svc-mux svc-mux
 ```
 
 The chart keeps the default LoadBalancer Service via `helm.sh/resource-policy: keep`. To delete managed Services later, remove the configured API finalizer, for example `svc-mux.nowake.ai/finalizer`.

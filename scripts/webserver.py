@@ -1,4 +1,4 @@
-"""Debug webserver for LB4 Multiplexer using aiohttp"""
+"""Debug webserver for Service LoadBalancer Multiplexer using aiohttp"""
 
 import asyncio
 import base64
@@ -100,7 +100,7 @@ async def auth_middleware(request, handler):
         return aiohttp.web.Response(
             text="Unauthorized - authentication required",
             status=401,
-            headers={"WWW-Authenticate": 'Basic realm="LB4 Multiplexer Debug UI"'},
+            headers={"WWW-Authenticate": 'Basic realm="Service LoadBalancer Multiplexer Debug UI"'},
         )
 
     # Process the request

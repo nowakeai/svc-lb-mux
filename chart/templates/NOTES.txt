@@ -24,7 +24,7 @@ Next Steps:
    - Ensure all ports have names
 
 3. View controller logs:
-   kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "lb4-multiplexer.name" . }} -f
+   kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "svc-lb-mux.name" . }} -f
 
 For more information, visit:
   https://github.com/nowakeai/svc-lb-mux

@@ -9,7 +9,7 @@ from kr8s import NotFoundError
 from kr8s.objects import Event
 
 NAMESPACE = os.environ.get("NAMESPACE", "default")
-POD_NAME = os.environ.get("POD_NAME", "lb4-multiplexer")
+POD_NAME = os.environ.get("POD_NAME", "svc-lb-mux")
 DRYRUN_MODE = os.environ.get("DRYRUN_MODE", "").lower() in ("true", "1", "yes", "on")
 
 

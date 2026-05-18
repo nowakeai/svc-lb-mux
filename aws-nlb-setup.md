@@ -1,4 +1,4 @@
-# Set up AWS NLB for LoadBalancer Multiplexer
+# Set up AWS NLB for Service LoadBalancer Multiplexer
 
 ## 1. Install AWS Load Balancer Controller
 
@@ -94,9 +94,9 @@ SUBNETS=$(
 aws ec2 create-tags --resources $(echo $SUBNETS) --tags Key=kubernetes.io/role/elb,Value=1
 ```
 
-## 2. Set up NLB for LoadBalancer Multiplexer
+## 2. Set up NLB for Service LoadBalancer Multiplexer
 
-The multiplexer service need to have following settings
+The mux Service needs the following settings
 
 ```yaml
 annotations:

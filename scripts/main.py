@@ -29,14 +29,14 @@ logging.basicConfig(
 )
 # print logger level
 print(f"Current Log Level: {logging.getLevelName(logging.getLogger().level)}")
-if os.getenv("LB4_DEBUG", "").lower() in ("true", "on", "yes"):
+if os.getenv("SVC_LB_MUX_DEBUG", "").lower() in ("true", "on", "yes"):
     logging.getLogger().setLevel(logging.DEBUG)
 # mute kr8s logger
 logging.getLogger("kr8s").setLevel(logging.WARN)
 
 NAMESPACE = os.environ.get("NAMESPACE", "default")
 DEFAULT_MUX_NAMESPACE = os.environ.get("DEFAULT_MUX_NAMESPACE", NAMESPACE)
-POD_NAME = os.environ.get("POD_NAME", "lb4-multiplexer")
+POD_NAME = os.environ.get("POD_NAME", "svc-lb-mux")
 DEBUG_WEB_ENABLED = os.environ.get("DEBUG_WEB_ENABLED", "true").lower() in ("true", "1", "yes", "on")
 DEBUG_WEB_PORT = int(os.environ.get("DEBUG_WEB_PORT", "8080"))
 

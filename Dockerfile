@@ -11,8 +11,8 @@ RUN pip install --no-cache-dir --root-user-action=ignore -r /tmp/requirements.tx
 
 COPY scripts/ /app/
 
-RUN useradd --uid 10001 --home-dir /app --shell /usr/sbin/nologin slb-mux \
-    && chown -R slb-mux:slb-mux /app
+RUN useradd --uid 10001 --home-dir /app --shell /usr/sbin/nologin svc-lb-mux \
+    && chown -R svc-lb-mux:svc-lb-mux /app
 USER 10001
 
 CMD ["kopf", "run", "--verbose", "--standalone", "--all-namespaces", "--liveness=http://0.0.0.0:8081/healthz", "/app/main.py"]

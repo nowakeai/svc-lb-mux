@@ -1,4 +1,4 @@
-"""LB4 Multiplexer Debug Tool - Python Package"""
+"""Service LoadBalancer Multiplexer Debug Tool - Python package"""
 
 from .types import TestResult, P2PProtocol, PodInfo, PortRoute, MuxInfo, PeerInfo
 from .k8s_client import KubeClient

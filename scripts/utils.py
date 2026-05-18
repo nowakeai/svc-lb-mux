@@ -1,4 +1,4 @@
-"""Utility functions for LB4 Multiplexer"""
+"""Utility functions for Service LoadBalancer Multiplexer"""
 
 
 def parse_external_dns(dns_annotation):

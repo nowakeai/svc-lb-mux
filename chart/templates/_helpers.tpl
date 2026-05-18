@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "lb4-multiplexer.name" -}}
+{{- define "svc-lb-mux.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "lb4-multiplexer.fullname" -}}
+{{- define "svc-lb-mux.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "lb4-multiplexer.chart" -}}
+{{- define "svc-lb-mux.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "lb4-multiplexer.labels" -}}
-helm.sh/chart: {{ include "lb4-multiplexer.chart" . }}
-{{ include "lb4-multiplexer.selectorLabels" . }}
+{{- define "svc-lb-mux.labels" -}}
+helm.sh/chart: {{ include "svc-lb-mux.chart" . }}
+{{ include "svc-lb-mux.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -45,17 +45,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "lb4-multiplexer.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "lb4-multiplexer.name" . }}
+{{- define "svc-lb-mux.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "svc-lb-mux.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "lb4-multiplexer.serviceAccountName" -}}
+{{- define "svc-lb-mux.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "lb4-multiplexer.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "svc-lb-mux.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}

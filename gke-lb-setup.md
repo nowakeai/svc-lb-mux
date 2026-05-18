@@ -44,16 +44,16 @@ defaultLoadBalancer:
 Install with defaults:
 
 ```console
-kubectl create namespace lb4
-helm install service-loadbalancer-multiplexer ./chart \
-  --namespace lb4 \
+kubectl create namespace svc-mux
+helm install svc-mux ./chart \
+  --namespace svc-mux \
   --set image.tag=latest
 ```
 
 Check the mux Service:
 
 ```console
-kubectl get svc mux -n lb4 -w
+kubectl get svc mux -n svc-mux -w
 ```
 
 When provisioning completes, `EXTERNAL-IP` shows the GKE load balancer IP.
@@ -100,8 +100,8 @@ defaultLoadBalancer:
 Install or upgrade:
 
 ```console
-helm upgrade --install service-loadbalancer-multiplexer ./chart \
-  --namespace lb4 \
+helm upgrade --install svc-mux ./chart \
+  --namespace svc-mux \
   --set image.tag=latest \
   --set defaultLoadBalancer.loadBalancerIP=$MUX_IP
 ```
@@ -119,8 +119,8 @@ defaultLoadBalancer:
 Install or upgrade:
 
 ```console
-helm upgrade --install service-loadbalancer-multiplexer ./chart \
-  --namespace lb4 \
+helm upgrade --install svc-mux ./chart \
+  --namespace svc-mux \
   --set image.tag=latest \
   --set-string defaultLoadBalancer.annotations.networking\.gke\.io/load-balancer-ip-addresses=$ADDRESS_NAME
 ```
@@ -154,7 +154,7 @@ Internal and external Services use different Google Cloud load balancing resourc
 
 ## Channel Services
 
-After the mux is ready, channel Services use the configured API prefix. With the default prefix and a mux named `mux` in namespace `lb4`:
+After the mux is ready, channel Services use the configured API prefix. With the default prefix and a mux named `mux` in namespace `svc-mux`:
 
 ```yaml
 apiVersion: v1
@@ -164,7 +164,7 @@ metadata:
   namespace: my-namespace
 spec:
   type: LoadBalancer
-  loadBalancerClass: svc-mux.nowake.ai/mux.lb4
+  loadBalancerClass: svc-mux.nowake.ai/mux.svc-mux
   selector:
     app: my-app
   ports:
@@ -180,14 +180,14 @@ The channel still needs `type: LoadBalancer` so Kubernetes allocates NodePorts. 
 Check the mux Service and events:
 
 ```console
-kubectl describe svc mux -n lb4
-kubectl get events -n lb4 --sort-by=.lastTimestamp
+kubectl describe svc mux -n svc-mux
+kubectl get events -n svc-mux --sort-by=.lastTimestamp
 ```
 
 Check controller logs:
 
 ```console
-kubectl logs -n lb4 -l app.kubernetes.io/name=service-loadbalancer-multiplexer -f
+kubectl logs -n svc-mux -l app.kubernetes.io/name=svc-mux -f
 ```
 
 Common issues:

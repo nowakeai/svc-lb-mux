@@ -4,7 +4,7 @@ kind: Service
 metadata:
   name: {{ .Values.defaultLoadBalancer.name }}
   labels:
-    {{- include "lb4-multiplexer.labels" . | nindent 4 }}
+    {{- include "svc-lb-mux.labels" . | nindent 4 }}
     {{- with .Values.defaultLoadBalancer.labels }}
     {{- . | toYaml | nindent 4 }}
     {{- end }}

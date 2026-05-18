@@ -1,7 +1,8 @@
-"""Main debugger class for LB4 Multiplexer"""
+"""Main debugger class for Service LoadBalancer Multiplexer"""
 
 import json
 import logging
+import os
 import socket
 from typing import Dict, List, Optional, Tuple
 
@@ -10,6 +11,8 @@ from .k8s_client import KubeClient
 from .p2p_tester import P2PTester
 
 logger = logging.getLogger(__name__)
+
+API_PREFIX = os.environ.get("API_PREFIX", "svc-mux.nowake.ai").strip() or "svc-mux.nowake.ai"
 
 
 class MuxDebugger:
@@ -29,7 +32,7 @@ class MuxDebugger:
 
         for svc in services:
             annotations = svc.get("metadata", {}).get("annotations", {})
-            if annotations.get("lb4-multiplexer.altlayer.io/multiplexer") == "true":
+            if annotations.get(f"{API_PREFIX}/multiplexer") == "true":
                 mux_info = self._build_mux_info(svc)
                 mux_list.append(mux_info)
 
@@ -51,7 +54,7 @@ class MuxDebugger:
             lb_ip = ingress.get("ip")
 
         # Parse channels
-        channels_str = annotations.get("lb4-multiplexer.altlayer.io/channels", "[]")
+        channels_str = annotations.get(f"{API_PREFIX}/channels", "[]")
         try:
             channels = json.loads(channels_str)
         except json.JSONDecodeError:
@@ -86,7 +89,7 @@ class MuxDebugger:
             metadata = svc.get("metadata", {})
 
             lb_class = spec.get("loadBalancerClass", "")
-            if not lb_class.startswith("lb4-multiplexer.altlayer.io/"):
+            if not lb_class.startswith(API_PREFIX + "/"):
                 continue
 
             # Parse mux reference
@@ -105,7 +108,7 @@ class MuxDebugger:
             annotations = metadata.get("annotations", {})
 
             # Parse port mappings
-            ports_anno = annotations.get("lb4-multiplexer.altlayer.io/ports", "")
+            ports_anno = annotations.get(f"{API_PREFIX}/ports", "")
 
             # Get external-dns annotation for channel
             channel_external_dns = annotations.get("external-dns.alpha.kubernetes.io/hostname")
@@ -148,7 +151,7 @@ class MuxDebugger:
         self, lb_class: str, default_namespace: str
     ) -> Tuple[str, str]:
         """Parse mux name and namespace from loadBalancerClass"""
-        prefix = "lb4-multiplexer.altlayer.io/"
+        prefix = API_PREFIX + "/"
         if not lb_class.startswith(prefix):
             raise ValueError(f"Invalid loadBalancerClass: {lb_class}")
 
@@ -195,7 +198,7 @@ class MuxDebugger:
 
         return pod_infos
 
-    def display_graph(self, mux_name: str, mux_namespace: str = "lb4"):
+    def display_graph(self, mux_name: str, mux_namespace: str = "svc-mux"):
         """Display routing graph for a mux"""
         logger.info(f"Building routing graph for mux: {mux_namespace}/{mux_name}")
 
@@ -539,7 +542,7 @@ class MuxDebugger:
             else:
                 print(f"{TestResult.WARNING.value} Could not retrieve peer info")
 
-    def test_mux(self, mux_name: str, mux_namespace: str = "lb4"):
+    def test_mux(self, mux_name: str, mux_namespace: str = "svc-mux"):
         """Test all routes in a mux"""
         logger.info(f"Testing mux: {mux_namespace}/{mux_name}")
 

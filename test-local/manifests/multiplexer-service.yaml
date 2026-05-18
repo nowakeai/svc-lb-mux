@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mux
-  namespace: default
+  namespace: svc-mux
   annotations:
     svc-mux.nowake.ai/multiplexer: "true"
 spec:
@@ -22,7 +22,7 @@ status:
 # kind: EndpointSlice
 # metadata:
 #   name: mux
-#   namespace: default
+#   namespace: svc-mux
 #   labels:
 #     kubernetes.io/service-name: mux
 # addressType: IPv4

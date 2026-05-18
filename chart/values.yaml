@@ -11,7 +11,7 @@ image:
   tag: ""
 
 imagePullSecrets: []
-nameOverride: ""
+nameOverride: "svc-mux"
 fullnameOverride: ""
 
 rbac:
@@ -112,12 +112,12 @@ args:
 
 env: []
   # Additional environment variables
-  # - name: LB4_DEBUG
+  # - name: SVC_LB_MUX_DEBUG
   #   value: "true"
   # - name: DRYRUN_MODE
   #   value: "false"
   # - name: DEFAULT_MUX_NAMESPACE
-  #   value: "lb4"
+  #   value: "svc-mux"
 
 # Debug web UI configuration
 debugWeb:
@@ -147,14 +147,14 @@ debugWeb:
       # cert-manager.io/cluster-issuer: letsencrypt-prod
       # nginx.ingress.kubernetes.io/ssl-redirect: "true"
     hosts:
-      - host: lb4-mux-debug.example.com
+      - host: svc-mux-debug.example.com
         paths:
           - path: /
             pathType: Prefix
     tls: []
-    #  - secretName: lb4-mux-debug-tls
+    #  - secretName: svc-mux-debug-tls
     #    hosts:
-    #      - lb4-mux-debug.example.com
+    #      - svc-mux-debug.example.com
 
 defaultLoadBalancer:
   create: true

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-LB4 Multiplexer Debug Tool
+Service LoadBalancer Multiplexer Debug Tool
 
-A unified tool for debugging and testing LB4 multiplexer services, channels, and P2P connections.
+A unified tool for debugging and testing Service LoadBalancer Multiplexer services, channels, and P2P connections.
 
 Usage:
     # List all mux services
@@ -69,7 +69,7 @@ def parse_resource_name(resource_arg: str, namespace_arg: Optional[str]) -> Tupl
 
 def main():
     parser = argparse.ArgumentParser(
-        description="LB4 Multiplexer Debug Tool",
+        description="Service LoadBalancer Multiplexer Debug Tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -90,7 +90,7 @@ def main():
     graph_parser = subparsers.add_parser("graph", help="Show routing graph for a mux")
     graph_parser.add_argument("mux", help="Mux service name or namespace/name")
     graph_parser.add_argument(
-        "--namespace", "-n", help="Mux namespace (default: lb4, or auto-detect from name)"
+        "--namespace", "-n", help="Mux namespace (default: svc-mux, or auto-detect from name)"
     )
 
     # test command
@@ -108,7 +108,7 @@ def main():
     test_mux_parser = test_subparsers.add_parser("mux", help="Test all routes in a mux")
     test_mux_parser.add_argument("mux", help="Mux service name or namespace/name")
     test_mux_parser.add_argument(
-        "--namespace", "-n", help="Mux namespace (default: lb4, or auto-detect from name)"
+        "--namespace", "-n", help="Mux namespace (default: svc-mux, or auto-detect from name)"
     )
 
     # test all
@@ -157,7 +157,7 @@ def main():
                     print(f"  Channels: {mux.total_channels}")
 
         elif args.command == "graph":
-            mux_name, mux_namespace = parse_resource_name(args.mux, args.namespace or "lb4")
+            mux_name, mux_namespace = parse_resource_name(args.mux, args.namespace or "svc-mux")
             debugger.display_graph(mux_name, mux_namespace)
 
         elif args.command == "test":
@@ -165,7 +165,7 @@ def main():
                 pod_name, pod_namespace = parse_resource_name(args.pod, args.namespace)
                 debugger.test_pod(pod_name, pod_namespace)
             elif args.test_type == "mux":
-                mux_name, mux_namespace = parse_resource_name(args.mux, args.namespace or "lb4")
+                mux_name, mux_namespace = parse_resource_name(args.mux, args.namespace or "svc-mux")
                 debugger.test_mux(mux_name, mux_namespace)
             elif args.test_type == "all":
                 debugger.test_all_muxes()
