@@ -11,6 +11,7 @@ __pycache__/
 *.egg-info/
 
 # Python virtual environments and package management
+/requirements.txt
 .venv/
 venv/
 env/

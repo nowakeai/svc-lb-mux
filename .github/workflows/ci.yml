@@ -23,10 +23,17 @@ jobs:
         with:
           python-version: "3.13"
 
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.10.11"
+
       - uses: azure/setup-helm@v4
 
+      - name: Check dependency lockfile
+        run: uv lock --check
+
       - name: Compile Python sources
-        run: python -m py_compile scripts/main.py scripts/webserver.py scripts/events.py scripts/utils.py scripts/alert.py
+        run: python -m py_compile src/main.py src/webserver.py src/events.py src/utils.py src/alert.py
 
       - name: Lint Helm chart
         run: helm lint chart

@@ -1,23 +1,29 @@
-.PHONY: help requirements upgrade-chart update lint template test-requirements python-compile docker-build
+.PHONY: help requirements update-deps check-lock upgrade-chart update lint template python-compile docker-build
 
 CHART_DIR ?= chart
 IMAGE ?= ghcr.io/nowakeai/svc-lb-mux
 
 help:
 	@echo "Available targets:"
-	@echo "  requirements      - Export Python dependencies to scripts/requirements.txt"
+	@echo "  requirements      - Export a compatibility requirements.txt from uv.lock"
 	@echo "  upgrade-chart     - Bump patch version in chart/Chart.yaml"
-	@echo "  update            - Update dependencies and chart version"
+	@echo "  update-deps       - Upgrade Python dependencies in uv.lock"
 	@echo "  lint              - Lint Helm chart"
 	@echo "  template          - Render Helm chart"
-	@echo "  test-requirements - Verify requirements.txt can be installed"
+	@echo "  check-lock        - Verify uv.lock is up to date"
 	@echo "  python-compile    - Compile Python sources"
 	@echo "  docker-build      - Build controller image locally"
 
 requirements:
-	@echo "Exporting requirements.txt..."
-	@uv export --format requirements-txt --no-editable > scripts/requirements.txt
-	@echo "Generated scripts/requirements.txt"
+	@echo "Exporting compatibility requirements.txt..."
+	@uv export --format requirements-txt --no-editable --locked > requirements.txt
+	@echo "Generated ignored requirements.txt from uv.lock"
+
+update-deps:
+	@uv lock --upgrade
+
+check-lock:
+	@uv lock --check
 
 upgrade-chart:
 	@echo "Bumping chart version..."
@@ -30,7 +36,7 @@ upgrade-chart:
 	sed -i "s/^version: .*/version: $$new_version/" $(CHART_DIR)/Chart.yaml; \
 	echo "Chart version: $$current -> $$new_version"
 
-update: requirements upgrade-chart
+update: update-deps upgrade-chart
 	@echo "Update complete"
 
 lint:
@@ -39,14 +45,8 @@ lint:
 template:
 	@helm template svc-mux $(CHART_DIR)
 
-test-requirements:
-	@tmpdir=$$(mktemp -d); \
-	python -m venv $$tmpdir; \
-	$$tmpdir/bin/python -m pip install --dry-run -r scripts/requirements.txt; \
-	rm -rf $$tmpdir
-
 python-compile:
-	@python -m py_compile scripts/main.py scripts/webserver.py scripts/events.py scripts/utils.py scripts/alert.py
+	@python -m py_compile src/main.py src/webserver.py src/events.py src/utils.py src/alert.py
 
 docker-build:
 	@docker build -t $(IMAGE):local .

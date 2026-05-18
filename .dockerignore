@@ -8,3 +8,4 @@ __pycache__
 .pytest_cache
 chart/*.tgz
 tools/rlpx-verify/rlpx-verify
+requirements.txt

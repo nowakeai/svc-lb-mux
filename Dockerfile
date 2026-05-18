@@ -1,15 +1,19 @@
 FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
 
-COPY scripts/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir --root-user-action=ignore -r /tmp/requirements.txt \
-    && rm /tmp/requirements.txt
+COPY --from=ghcr.io/astral-sh/uv:0.10.11 /uv /uvx /usr/local/bin/
 
-COPY scripts/ /app/
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-dev --no-install-project
+
+COPY src/ /app/
 
 RUN useradd --uid 10001 --home-dir /app --shell /usr/sbin/nologin svc-lb-mux \
     && chown -R svc-lb-mux:svc-lb-mux /app

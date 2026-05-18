@@ -1,14 +1,18 @@
 # Service LoadBalancer Multiplexer
 
+[![CI](https://github.com/nowakeai/svc-lb-mux/actions/workflows/ci.yml/badge.svg)](https://github.com/nowakeai/svc-lb-mux/actions/workflows/ci.yml)
+[![Image](https://img.shields.io/badge/GHCR-ghcr.io%2Fnowakeai%2Fsvc--lb--mux-blue)](https://github.com/nowakeai/svc-lb-mux/pkgs/container/svc-lb-mux)
+
 Service LoadBalancer Multiplexer is a Kubernetes controller that lets multiple `LoadBalancer` Services share one Layer 4 load balancer.
 
 The repository is split into application code and deployment packaging:
 
-- `scripts/`: controller and debug UI source code
+- `src/`: controller and debug UI source code
 - `chart/`: Helm chart, installed by default as release `svc-mux` in namespace `svc-mux`
 - `Dockerfile`: controller image build
 - `.github/workflows/ci.yml`: validation and GHCR image publishing
 - `docs/`: provider setup guides
+- `uv.lock`: locked Python runtime dependency graph
 
 The Kubernetes API prefix is configurable through `api.prefix`. New installs default to `svc-mux.nowake.ai`.
 
@@ -128,14 +132,19 @@ The chart keeps the default LoadBalancer Service via `helm.sh/resource-policy: k
 Common commands:
 
 ```console
+make check-lock
 make lint
 make template
 make python-compile
 make docker-build
 ```
 
-Dependency metadata lives in `pyproject.toml`; the runtime image installs pinned dependencies from `scripts/requirements.txt`. Regenerate requirements with:
+Dependency metadata lives in `pyproject.toml`; exact runtime dependencies are locked in `uv.lock`. The container installs dependencies with `uv sync --locked`, so `uv.lock` is the source of truth.
+
+Use these commands to maintain dependencies:
 
 ```console
-make requirements
+make update-deps     # upgrade uv.lock
+make check-lock      # verify pyproject.toml and uv.lock are consistent
+make requirements    # generate ignored requirements.txt for compatibility only
 ```
