@@ -23,4 +23,6 @@ Issues = "https://github.com/nowakeai/svc-lb-mux/issues"
 package = false
 
 [dependency-groups]
-dev = []
+dev = [
+  "ruff>=0.14.6",
+]
