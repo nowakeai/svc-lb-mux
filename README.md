@@ -2,53 +2,49 @@
 
 [![CI](https://github.com/nowakeai/svc-lb-mux/actions/workflows/ci.yml/badge.svg)](https://github.com/nowakeai/svc-lb-mux/actions/workflows/ci.yml)
 [![Image](https://img.shields.io/badge/GHCR-ghcr.io%2Fnowakeai%2Fsvc--lb--mux-blue)](https://github.com/nowakeai/svc-lb-mux/pkgs/container/svc-lb-mux)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
-Service LoadBalancer Multiplexer is a Kubernetes controller that lets multiple `LoadBalancer` Services share one Layer 4 load balancer.
+Service LoadBalancer Multiplexer, or `svc-lb-mux`, is a Kubernetes controller that lets many application-facing `LoadBalancer` Services share one provider-managed Layer 4 load balancer.
 
-## Motivation
+It is built for teams that expose many TCP/UDP services and want to keep the Kubernetes Service workflow while reducing cloud load balancer count, provisioning time, quota pressure, and recurring cost.
 
-Kubernetes makes external TCP/UDP exposure convenient with `type: LoadBalancer`, but each Service usually asks the cloud provider to create a separate load balancer. That becomes painful for workloads with many externally reachable ports or many small services: cloud load balancer quotas become a scaling limit, provisioning is slower, and every extra load balancer adds recurring cost.
+## Why It Exists
 
-This project was built for cases where many Services can safely share one provider-managed Layer 4 load balancer. A selectorless mux Service owns the cloud load balancer, while channel Services keep the familiar Kubernetes Service workflow. The controller mirrors channel ports and endpoints onto the mux, then syncs the mux ingress status back to the channels. The result is fewer cloud load balancers, lower cost, and less pressure on provider load balancer limits without forcing application teams to give up Service objects.
+Kubernetes makes external L4 exposure simple with `type: LoadBalancer`, but the default cloud-provider behavior is usually one cloud load balancer per Service. That model gets expensive and operationally awkward when a cluster has many small Services, many externally reachable ports, or quota-constrained environments.
 
-The repository is split into application code and deployment packaging:
+`svc-lb-mux` keeps the familiar Service abstraction and consolidates the cloud-facing load balancer layer:
 
-- `src/`: controller and debug UI source code
-- `chart/`: Helm chart, installed by default as release `svc-mux` in namespace `svc-mux`
-- `Dockerfile`: controller image build
-- `.github/workflows/ci.yml`: validation and GHCR image publishing
-- `docs/`: provider setup guides
-- `uv.lock`: locked Python runtime dependency graph
-
-The Kubernetes API prefix is configurable through `api.prefix`. New installs default to `svc-mux.nowake.ai`.
+- **Fewer cloud load balancers**: one mux Service can front many channel Services.
+- **Lower cost surface**: reduce duplicate provider L4 load balancers for compatible workloads.
+- **Less quota pressure**: stretch limited forwarding rule, IP, and load balancer quotas.
+- **Kubernetes-native operations**: use Services, annotations, Helm, events, Endpoints, and GitOps ignore rules.
+- **No cloud IAM dependency for the normal path**: on GKE, forwarding rules and firewall rules remain GKE-managed.
+- **Stable port allocation**: automatic channel ports are persisted per mux in a ConfigMap.
 
 ## Concepts
 
-The naming is borrowed from electronic multiplexers: many input channels are carried through one shared output path. In this project, a mux is the shared load balancer owner, and channels are the user-facing Service interfaces attached to that mux.
+The naming comes from electronic multiplexers: many input channels are carried through one shared output path.
 
-- **Multiplexer**: a selectorless `LoadBalancer` Service that owns the shared external load balancer.
-- **Channel**: a `LoadBalancer` Service that points at a multiplexer through `spec.loadBalancerClass`.
+- **Mux**: a selectorless `LoadBalancer` Service that owns the shared provider L4 load balancer.
+- **Channel**: an application-facing `LoadBalancer` Service that points at a mux through `spec.loadBalancerClass`.
 
 ```mermaid
 flowchart LR
-    subgraph external[External traffic]
+    subgraph ext[External]
         client[Clients]
         lb[Provider L4 Load Balancer]
     end
 
-    subgraph control[Control plane]
-        controller[svc-lb-mux controller]
-    end
-
-    subgraph services[Kubernetes Services]
+    subgraph k8s[Kubernetes]
         mux["Mux Service<br/>selectorless LoadBalancer"]
         ch1["Channel Service A<br/>loadBalancerClass -> mux"]
         ch2["Channel Service B<br/>loadBalancerClass -> mux"]
+        pod1[Backend pods A]
+        pod2[Backend pods B]
     end
 
-    subgraph backends[Backend pods]
-        pod1[Pods A]
-        pod2[Pods B]
+    subgraph ctl[Controller]
+        controller[svc-lb-mux]
     end
 
     client --> lb --> mux
@@ -56,15 +52,24 @@ flowchart LR
     mux --> pod2
     ch1 --> pod1
     ch2 --> pod2
-
-    controller -. "ports + endpoints" .-> mux
-    controller -. "mux ingress status" .-> ch1
-    controller -. "mux ingress status" .-> ch2
+    controller -. "sync ports + endpoints" .-> mux
+    controller -. "copy mux ingress status" .-> ch1
+    controller -. "copy mux ingress status" .-> ch2
 ```
 
-## Install
+The mux Service name does not have to be `mux`. A common production pattern is one mux per namespace or project, using a semantic name such as `payments`, `rollup-p2p`, or simply `mux` within each namespace.
 
-Builds from this repo publish the controller image to `ghcr.io/nowakeai/svc-lb-mux`. Install the chart from the repository root:
+## Provider Status
+
+| Provider | Status | Notes |
+| --- | --- | --- |
+| GKE | Actively validated | Default chart values target GKE external passthrough Network Load Balancers. One mux is capped at 100 Service ports to stay inside GKE-native behavior. |
+| EKS | Supported guide | AWS NLB setup is documented; provider-specific validation should be repeated in your environment. |
+| Other Kubernetes providers | Experimental | The core model is Kubernetes-native, but provider load balancer behavior varies. |
+
+## Quick Start
+
+Builds from this repository publish images to `ghcr.io/nowakeai/svc-lb-mux`. Install the Helm chart from the repository root:
 
 ```console
 kubectl create namespace svc-mux
@@ -73,31 +78,27 @@ helm install svc-mux ./chart \
   --set image.tag=latest
 ```
 
-The chart defaults create one multiplexer Service named `mux` in namespace `svc-mux`. These are only defaults. In production, choose names that match your ownership model: commonly one mux per namespace or project, either with a semantic name such as `payments` or `rollup-p2p`, or simply `mux` in each project namespace and let the namespace disambiguate it.
+The default chart creates a mux Service named `mux` in namespace `svc-mux`. These are defaults, not requirements.
 
-## API Prefix
-
-New resources use `svc-mux.nowake.ai` by default:
+The default API prefix is `svc-mux.nowake.ai`:
 
 ```yaml
 api:
   prefix: svc-mux.nowake.ai
 ```
 
-Set `api.prefix` in your values file when a deployment needs a different API prefix. The controller reads and writes annotations, finalizers, and `loadBalancerClass` values using that single configured prefix.
+Set `api.prefix` in your values file if your organization needs a different prefix. The controller uses this prefix for annotations, finalizers, and `loadBalancerClass` references.
 
-## Default LoadBalancer
+## Default Mux Values
 
-Customize the default multiplexer through `chart/values.yaml`:
+The chart defaults are conservative for GKE:
 
 ```yaml
 defaultLoadBalancer:
   create: true
   name: mux
-  labels: {}
   annotations:
     cloud.google.com/l4-rbs: "enabled"
-  loadBalancerIP: ""
   loadBalancerClass: ""
   allocateLoadBalancerNodePorts: true
   portRange: "20000-20099"
@@ -105,19 +106,11 @@ defaultLoadBalancer:
   allocationConfigMapName: ""
 ```
 
-The default chart values target GKE. See [docs/gke-lb-setup.md](docs/gke-lb-setup.md) for GKE architecture, static IP binding, capacity planning, and provider-specific options. For EKS/NLB deployments, see [docs/aws-nlb-setup.md](docs/aws-nlb-setup.md).
-
-If a multiplexer has no channels, the controller keeps a placeholder `101/TCP` port. When GitOps manages the mux Service, that placeholder must not be treated as the desired runtime port list: the controller owns mux `spec.ports` and rewrites it from channel mappings. Configure GitOps to ignore mux `spec.ports`; see [docs/gitops.md](docs/gitops.md).
+For production GKE installs, see [docs/gke-lb-setup.md](docs/gke-lb-setup.md), including static IP binding, the GKE 100-port mux limit, generated Google Cloud resources, and validation commands. For AWS, see [docs/aws-nlb-setup.md](docs/aws-nlb-setup.md).
 
 ## Create A Channel Service
 
-A channel Service must:
-
-1. Set `spec.type` to `LoadBalancer`.
-2. Set `spec.loadBalancerClass` to `<api-prefix>/<mux>[.<namespace>]`. The default prefix is `svc-mux.nowake.ai`; `<mux>` and `<namespace>` are the actual multiplexer Service name and namespace you choose.
-3. Name every port.
-
-Example using the chart defaults:
+A channel Service keeps `type: LoadBalancer`, but points at a mux instead of asking the cloud provider for a new load balancer.
 
 ```yaml
 apiVersion: v1
@@ -125,8 +118,6 @@ kind: Service
 metadata:
   name: my-service
   namespace: my-namespace
-  annotations:
-    external-dns.alpha.kubernetes.io/hostname: my-hostname.com
 spec:
   type: LoadBalancer
   loadBalancerClass: svc-mux.nowake.ai/mux.svc-mux
@@ -136,15 +127,17 @@ spec:
   ports:
     - name: http
       port: 80
-      targetPort: 80
-    - name: https
-      port: 443
-      targetPort: 443
+      targetPort: 8080
 ```
 
-By default, the controller uses each channel `spec.ports[].port` as the mux external port, so channel Services do not need NodePorts. Set `allocateLoadBalancerNodePorts: false` on channels unless you have a provider-specific reason to keep NodePorts. The controller mirrors channel endpoints onto the multiplexer and syncs the multiplexer `status.loadBalancer.ingress` back to the channel Service.
+Rules:
 
-To expose a different mux port without changing the channel Service port, set `<api-prefix>/external-ports` with `portName:externalPort` pairs:
+- `spec.loadBalancerClass` is `<api-prefix>/<mux>[.<namespace>]`.
+- Every channel port must have a stable name.
+- Channels normally set `allocateLoadBalancerNodePorts: false`; the mux owns the provider-facing load balancer ports.
+- By default, the channel Service port is used as the external mux port.
+
+To expose a different external mux port, use `external-ports`:
 
 ```yaml
 metadata:
@@ -152,15 +145,7 @@ metadata:
     svc-mux.nowake.ai/external-ports: "http:8080,https:8443"
 ```
 
-For automatic assignment, configure a mux port range and request `auto` on the channel:
-
-```yaml
-defaultLoadBalancer:
-  portRange: "20000-20099"
-  maxPorts: 100
-  # Optional per-mux override. Defaults to <mux-name>-port-allocations.
-  allocationConfigMapName: ""
-```
+To let the mux allocate from its port pool:
 
 ```yaml
 metadata:
@@ -168,39 +153,34 @@ metadata:
     svc-mux.nowake.ai/external-ports: "http:auto"
 ```
 
-The controller stores automatic assignments in one ConfigMap per mux so mappings stay stable across restarts and Service re-application without coupling unrelated muxes to the same object size or update stream. The ConfigMap data contains an `allocations.json` entry with the mux reference, channel namespace/name, port name, protocol, assigned port, and source. Port names are the stable identity for mappings. Within one mux, each `(external port, protocol)` pair can be claimed by only one channel. Do not reuse the same allocation ConfigMap name for multiple muxes.
+Automatic assignments are stored in one ConfigMap per mux. This keeps mappings stable across controller restarts and GitOps re-application without coupling unrelated muxes to the same state object.
 
-## Debug Web UI
+## GitOps
 
-The debug UI is enabled by default on port `8080`, and authentication is enabled by default. If you do not provide a token, Helm generates one in a Secret. Active debug actions, such as TCP probes, are disabled by default; set `debugWeb.actions.enabled=true` only for trusted environments.
+The controller owns the mux Service runtime `spec.ports` because that list is derived from active channels. If GitOps manages mux Services, configure it to ignore mux `spec.ports`; otherwise GitOps and the controller will continuously overwrite each other.
 
-Retrieve the generated token:
+See [docs/gitops.md](docs/gitops.md) for Argo CD and Flux examples.
+
+## Debug UI
+
+The debug UI is enabled by default on port `8080` and requires a token by default. Helm generates a Secret if no token is provided. Mutating debug actions are disabled unless explicitly enabled.
 
 ```console
 kubectl get secret -n svc-mux svc-mux-debug-token -o jsonpath='{.data.token}' | base64 -d
-```
-
-Port-forward locally:
-
-```console
 kubectl port-forward -n svc-mux deployment/svc-mux 8080:8080
 ```
 
-Then open <http://localhost:8080> and use any username with the token as the password.
+Open <http://localhost:8080> and use any username with the token as the password.
 
-For external access, enable `debugWeb.ingress` and use TLS.
+## Documentation
 
-## Uninstall
-
-```console
-helm uninstall --namespace svc-mux svc-mux
-```
-
-The chart keeps the default LoadBalancer Service via `helm.sh/resource-policy: keep`. To delete managed Services later, remove the configured API finalizer, for example `svc-mux.nowake.ai/finalizer`.
+- [GKE LoadBalancer setup](docs/gke-lb-setup.md)
+- [AWS NLB setup](docs/aws-nlb-setup.md)
+- [GitOps compatibility](docs/gitops.md)
+- [GKE pressure test report](docs/gke-pressure-test-report.md)
+- [Roadmap](ROADMAP.md)
 
 ## Development
-
-Common commands:
 
 ```console
 make check-lock
@@ -213,10 +193,11 @@ make docker-build
 
 Dependency metadata lives in `pyproject.toml`; exact runtime dependencies are locked in `uv.lock`. The container installs dependencies with `uv sync --locked`, so `uv.lock` is the source of truth.
 
-Use these commands to maintain dependencies:
+## Community
 
-```console
-make update-deps     # upgrade uv.lock
-make check-lock      # verify pyproject.toml and uv.lock are consistent
-make requirements    # generate ignored requirements.txt for compatibility only
-```
+Service LoadBalancer Multiplexer is maintained under the nowake.ai GitHub organization for open cloud-native infrastructure work. Contributions, provider validation reports, documentation fixes, and operational feedback are welcome.
+
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+- Read [SECURITY.md](SECURITY.md) for vulnerability reporting.
+- Read [SUPPORT.md](SUPPORT.md) for support expectations.
+- This project is licensed under [Apache License 2.0](LICENSE).

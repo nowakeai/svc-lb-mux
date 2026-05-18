@@ -1,48 +1,55 @@
-# Set up GKE LoadBalancer for Service LoadBalancer Multiplexer
+# GKE LoadBalancer Setup
 
-This guide explains how to run the default multiplexer Service on Google Kubernetes Engine (GKE). The chart defaults are tuned for an external GKE passthrough Network Load Balancer.
+This guide shows how to run Service LoadBalancer Multiplexer on Google Kubernetes Engine (GKE) using GKE-managed LoadBalancer Services.
 
-References:
+The default chart values target an external GKE passthrough Network Load Balancer in backend service mode. The normal operating model does not require the controller to create Google Cloud firewall rules, forwarding rules, or other cloud resources directly.
 
-- [GKE Service LoadBalancer concepts](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/service-load-balancer)
-- [GKE Service LoadBalancer parameters](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/service-load-balancer-parameters)
+## Architecture On GKE
 
-## How It Works
+A GKE install has two Service roles:
 
-Service LoadBalancer Multiplexer uses two kinds of Services:
+- **Mux Service**: selectorless `type: LoadBalancer`; GKE creates the cloud load balancer for this Service.
+- **Channel Service**: application-facing `type: LoadBalancer`; points at the mux through `spec.loadBalancerClass`.
 
-- **Mux Service**: a selectorless `type: LoadBalancer` Service. GKE provisions the external L4 load balancer for this Service.
-- **Channel Services**: user Services that declare `spec.loadBalancerClass: <api-prefix>/<mux>[.<namespace>]`. The controller watches these Services and mirrors their declared external ports and backend endpoints onto the mux Service.
+Traffic flow:
 
-On GKE, a `type: LoadBalancer` Service creates Google Cloud load balancing resources. The chart defaults use the `cloud.google.com/l4-rbs: "enabled"` annotation, which asks GKE to create a backend service-based external passthrough Network Load Balancer.
+```text
+client
+  -> GKE external passthrough Network Load Balancer
+  -> mux Service port
+  -> controller-managed mux Endpoints
+  -> channel backend pods
+```
 
-The traffic path is:
+Control flow:
 
-1. A client connects to the mux load balancer IP on a channel port.
-2. GKE forwards the TCP/UDP flow to cluster nodes for the mux Service.
-3. Kubernetes Service routing sends the flow to the endpoint set maintained by the controller.
-4. The channel Service receives the mux load balancer ingress status, so DNS automation can point users at the shared mux address.
+```text
+channel Service + channel Endpoints
+  -> svc-lb-mux controller
+  -> mux Service ports + mux Endpoints
+  -> channel status.loadBalancer.ingress
+```
 
-The mux Service has no selector. The controller manages its ports and Endpoints object directly. When there are no channels, the controller keeps a placeholder `101/TCP` port so the Service remains valid.
+The mux Service has no selector. The controller owns the mux runtime ports and Endpoints. When no channels exist, the controller keeps a placeholder `101/TCP` port so Kubernetes accepts the Service.
 
-## Default Chart Configuration
+## Recommended Defaults
 
-The default `chart/values.yaml` mux configuration is GKE-oriented. The Service name `mux` and namespace `svc-mux` are chart defaults, not required names:
+The chart defaults are GKE-oriented:
 
 ```yaml
 defaultLoadBalancer:
   create: true
   name: mux
-  labels: {}
   annotations:
     cloud.google.com/l4-rbs: "enabled"
-  loadBalancerIP: ""
   loadBalancerClass: ""
   allocateLoadBalancerNodePorts: true
   portRange: "20000-20099"
   maxPorts: 100
   allocationConfigMapName: ""
 ```
+
+`cloud.google.com/l4-rbs: "enabled"` asks GKE to create a backend service-based external passthrough Network Load Balancer.
 
 Install with defaults:
 
@@ -51,56 +58,39 @@ kubectl create namespace svc-mux
 helm install svc-mux ./chart \
   --namespace svc-mux \
   --set image.tag=latest
-```
 
-Check the mux Service:
-
-```console
 kubectl get svc mux -n svc-mux -w
 ```
 
-When provisioning completes, `EXTERNAL-IP` shows the GKE load balancer IP.
+The names `svc-mux` and `mux` are defaults only. Use names that match your namespace, product, or ownership model.
 
-## Bind A Static External IP
+## Static External IP
 
-For production, reserve a regional static external IPv4 address and bind the mux Service to it. The static address must be in the same region as the GKE cluster.
-
-Set environment variables:
+For production, reserve a regional static external IPv4 address in the same region as the GKE cluster.
 
 ```console
 PROJECT_ID=my-project
 REGION=us-central1
 ADDRESS_NAME=svc-mux-ip
-```
 
-Reserve the address:
-
-```console
 gcloud compute addresses create $ADDRESS_NAME \
   --project $PROJECT_ID \
   --region $REGION
-```
 
-Get the reserved IP:
-
-```console
 MUX_IP=$(gcloud compute addresses describe $ADDRESS_NAME \
   --project $PROJECT_ID \
   --region $REGION \
   --format='value(address)')
-echo $MUX_IP
 ```
 
-### Option 1: Bind By IP Address
+There are two common binding styles.
 
-Use `defaultLoadBalancer.loadBalancerIP`:
+### Bind By IP Address
 
 ```yaml
 defaultLoadBalancer:
   loadBalancerIP: "203.0.113.10"
 ```
-
-Install or upgrade:
 
 ```console
 helm upgrade --install svc-mux ./chart \
@@ -109,9 +99,9 @@ helm upgrade --install svc-mux ./chart \
   --set defaultLoadBalancer.loadBalancerIP=$MUX_IP
 ```
 
-### Option 2: Bind By Address Resource Name
+### Bind By Address Resource Name
 
-On supported GKE versions, use the GKE annotation that names the reserved address resource. For external passthrough Network Load Balancers, current GKE documentation requires the GKE load balancer class when using this annotation:
+Use the GKE address-name annotation when you want manifests to reference the reserved address resource instead of embedding the numeric IP.
 
 ```yaml
 defaultLoadBalancer:
@@ -121,8 +111,6 @@ defaultLoadBalancer:
   loadBalancerClass: networking.gke.io/l4-regional-external
 ```
 
-Install or upgrade:
-
 ```console
 helm upgrade --install svc-mux ./chart \
   --namespace svc-mux \
@@ -131,61 +119,11 @@ helm upgrade --install svc-mux ./chart \
   --set defaultLoadBalancer.loadBalancerClass=networking.gke.io/l4-regional-external
 ```
 
-Use the resource-name annotation when you want Kubernetes manifests to reference the reserved address by name instead of embedding the numeric IP. Use `loadBalancerIP` when you want the most direct, provider-neutral Service field. Set the load balancer class before creating the Service; Service load balancer class is immutable after creation.
-
-## GKE-Native Firewall Model
-
-GKE automatically creates and reconciles the ingress allow firewall rule for a `type: LoadBalancer` Service. Service LoadBalancer Multiplexer should stay inside that native model: the controller does not need Google Cloud IAM permissions and does not create, update, or delete VPC firewall rules.
-
-The practical rule for GKE is to keep each mux Service within GKE's documented Service LoadBalancer port model:
-
-- Use a compact, contiguous mux port range.
-- Keep one mux at or below 100 Service ports.
-- Split larger workloads across multiple mux Services instead of asking one GKE Service to expose more than 100 ports.
-
-The chart default follows this model:
-
-~~~yaml
-defaultLoadBalancer:
-  portRange: "20000-20099"
-  maxPorts: 100
-~~~
-
-With these settings, GKE can continue to own the forwarding rule and firewall rule. Adding a channel consumes one mux Service port inside the configured range; when the mux already has 100 ports, the controller emits a `MuxPortLimitExceeded` event and skips additional channels instead of pushing the Service into unsupported GKE behavior.
-
-The controller also detects GKE mux Services from GKE load balancer classes and common GKE Service annotations. If a detected GKE mux has no `svc-mux.nowake.ai/max-ports` annotation, the controller applies the GKE limit of 100 ports and emits a `GkePortLimitApplied` Warning event. If the configured value is higher than 100, the controller caps the effective value to 100 and emits the same Warning event.
-
-Do not manually edit the GKE-managed firewall rule. If you need more than 100 one-port channels, create additional mux Services with non-overlapping ranges, for example `20000-20099`, `20100-20199`, and `20200-20299`.
-
-## Network Tier
-
-GKE supports selecting the Google Cloud network tier for an external passthrough Network Load Balancer. Premium tier is the Google Cloud default. To be explicit:
-
-```yaml
-defaultLoadBalancer:
-  annotations:
-    cloud.google.com/network-tier: Premium
-```
-
-Use `Standard` only when your cluster, static address, and load balancing requirements are compatible with Standard tier.
-
-## Internal Load Balancer
-
-The chart defaults are for an external mux. For an internal GKE passthrough Network Load Balancer, use GKE's internal load balancer annotation and remove the external RBS annotation:
-
-```yaml
-defaultLoadBalancer:
-  annotations:
-    cloud.google.com/l4-rbs: ""
-    networking.gke.io/load-balancer-type: Internal
-  loadBalancerClass: ""
-```
-
-Internal and external Services use different Google Cloud load balancing resources. Choose the mode before production rollout because several Service load balancer parameters are immutable after creation.
+Set `loadBalancerClass` before creating the Service. Kubernetes treats Service load balancer class as immutable.
 
 ## Channel Services
 
-After the mux is ready, channel Services use the configured API prefix and the actual mux Service reference. With the chart defaults, the mux Service is `mux` in namespace `svc-mux`:
+A channel Service points at the mux through `spec.loadBalancerClass`:
 
 ```yaml
 apiVersion: v1
@@ -205,9 +143,16 @@ spec:
       targetPort: 8080
 ```
 
-The channel still uses `type: LoadBalancer` so Kubernetes accepts the custom `loadBalancerClass`, but the channel does not need NodePorts. By default, the controller uses each channel `spec.ports[].port` as the mux external port. Set `allocateLoadBalancerNodePorts: false` on channel Services to avoid unnecessary NodePort allocation.
+Channel rules:
 
-To expose a different mux port without changing the channel Service port, add the configured API prefix annotation:
+- Use `<api-prefix>/<mux>[.<namespace>]` for `loadBalancerClass`.
+- Name every port; port names are used as stable mapping identity.
+- Set `allocateLoadBalancerNodePorts: false` unless a provider-specific workflow requires NodePorts.
+- Each `(external port, protocol)` pair can be claimed by only one channel on the same mux.
+
+By default, the controller uses `spec.ports[].port` as the external mux port.
+
+To override the external port:
 
 ```yaml
 metadata:
@@ -215,15 +160,7 @@ metadata:
     svc-mux.nowake.ai/external-ports: "http:8080"
 ```
 
-Each `(external port, protocol)` pair can be used by only one channel on the same mux. For automatic assignment, configure `defaultLoadBalancer.portRange` on the mux and request `auto` on the channel:
-
-```yaml
-defaultLoadBalancer:
-  portRange: "20000-20099"
-  maxPorts: 100
-  # Optional per-mux override. Defaults to <mux-name>-port-allocations.
-  allocationConfigMapName: ""
-```
+To allocate automatically from the mux port range:
 
 ```yaml
 metadata:
@@ -231,121 +168,129 @@ metadata:
     svc-mux.nowake.ai/external-ports: "http:auto"
 ```
 
-Automatic assignments are stored in one ConfigMap per mux so the mapping remains stable across controller restarts and GitOps re-application without coupling unrelated muxes to the same object size or update stream. Do not reuse the same allocation ConfigMap name for multiple muxes.
+Automatic assignments are stored in one ConfigMap per mux. Do not reuse one allocation ConfigMap across multiple muxes.
 
-## Capacity Planning And GCP Limits
+## GKE Port And Firewall Model
 
-The capacity of one mux on GKE is the smallest limit across the controller port allocation range, the GKE Service load balancer frontend, Kubernetes endpoint state, and Google Cloud project quotas.
+The controller deliberately stays inside the GKE Service LoadBalancer model:
 
-For one-port channel Services, the controller-side port pool limit is:
+- GKE owns forwarding rules, backend services, health checks, NEGs, and firewall rules.
+- The controller does not need Google Cloud IAM permissions in the normal path.
+- One GKE mux is limited to 100 Service ports.
+- Larger workloads should be split across multiple mux Services.
 
-~~~text
-max_channels_by_port_pool = floor(port_range_size / ports_per_channel)
-port_range_size = end_port - start_port + 1
-~~~
+The default GKE range matches the GKE mux limit:
 
-With the default GKE range `20000-20099`:
+```yaml
+defaultLoadBalancer:
+  portRange: "20000-20099"
+  maxPorts: 100
+```
 
-~~~text
+If the controller detects a GKE-backed mux without `svc-mux.nowake.ai/max-ports`, it applies the GKE limit of 100 ports and emits `GkePortLimitApplied`. If a detected GKE mux configures a higher value, the controller caps the effective value to 100 and emits the same Warning event.
+
+When a new channel would exceed the effective mux limit, the controller skips that channel and emits `MuxPortLimitExceeded`.
+
+Do not manually edit GKE-managed firewall rules. If more than 100 one-port channels are needed, create additional muxes with non-overlapping ranges, for example:
+
+```text
+mux-a: 20000-20099
+mux-b: 20100-20199
+mux-c: 20200-20299
+```
+
+## Internal Load Balancer
+
+For an internal GKE passthrough Network Load Balancer, use GKE's internal load balancer annotation and remove the external RBS annotation:
+
+```yaml
+defaultLoadBalancer:
+  annotations:
+    cloud.google.com/l4-rbs: ""
+    networking.gke.io/load-balancer-type: Internal
+  loadBalancerClass: ""
+```
+
+Choose internal versus external mode before production rollout because several Service load balancer parameters are immutable after creation.
+
+## Capacity Planning
+
+For one-port channels, the mux capacity is bounded by the smallest of:
+
+```text
+configured port range size
+GKE Service LoadBalancer 100-port limit
+Kubernetes Endpoints object size
+Google Cloud regional quotas
+```
+
+With the default range:
+
+```text
 20099 - 20000 + 1 = 100 ports
-~~~
+```
 
-So the default GKE pool can assign up to **100 one-port channel mappings**, which matches the chart default `maxPorts: 100` guard. Larger ranges can be used on providers that support them, but on GKE a single mux should stay at or below 100 Service ports.
+So one GKE mux supports up to 100 one-port channel mappings in the current implementation.
 
-Current GKE-specific planning should use this conservative bound for a single mux:
+A mux also consumes Google Cloud resources. Check regional/project quota for:
 
-~~~text
-single_mux_channels <= min(
-  configured_port_range_size / ports_per_channel,
-  GKE managed Service port/frontend behavior,
-  Kubernetes endpoint object capacity,
-  available Google Cloud quotas
-)
-~~~
+- forwarding rules
+- external IPv4 addresses, if using reserved static IPs
+- backend services
+- health checks
+- firewall rules
 
-### Practical GKE Bound
-
-GKE documents Service load balancer port behavior around small discrete port sets and larger port sets. For backend service-based external passthrough Network Load Balancers, the Google Cloud forwarding rule can represent up to five discrete ports or one contiguous port range. GKE Service load balancer parameters also document the `all ports` behavior for more than five and up to 100 unique Service ports.
-
-Because the current controller writes one mux `spec.ports[]` entry for each exposed channel port, **100 one-port channels per mux** is the GKE-native public traffic target. The chart declares this with `maxPorts: 100` by default, and the controller enforces the same limit automatically for mux Services that it detects as GKE-backed even when users create mux Services outside the chart.
-
-For more than roughly 100 one-port channels, prefer one of these approaches:
-
-- Split channels across multiple mux Services, each with a compact contiguous range such as `20000-20099`, `20100-20199`, and `20200-20299`.
-- Keep ranges contiguous. Sparse port choices can cause the forwarding rule, firewall rule, and Service ports to diverge in surprising ways.
-- Validate the generated forwarding rule, backend service, health check, and firewall rule before declaring the mux ready for production traffic.
-- Track EndpointSlice support in the controller roadmap before using one mux for very large channel counts.
-
-### Google Cloud Resource Quotas
-
-A GKE external passthrough Network Load Balancer consumes Google Cloud resources. Exact quota names and defaults can vary by project, region, and load balancer mode, so check the project quotas instead of relying on static numbers in this document.
-
-For capacity planning, one mux usually consumes approximately:
-
-| Resource | Planning impact |
-| --- | --- |
-| Regional forwarding rule | Usually one per mux load balancer. This often becomes the first project-level mux-count quota to check. |
-| Regional external IPv4 address | One per mux when using a reserved static IP. |
-| Backend service | One per backend service-based external passthrough Network Load Balancer. |
-| Health check | GKE creates health-check resources for the load balancer path. |
-| Firewall rule | GKE creates firewall rules for Service load balancer traffic and health checks. |
-| Service ports | One mux Service port per exposed channel port in the current controller implementation. |
-
-Check current quota usage:
-
-~~~console
+```console
 gcloud compute project-info describe \
   --format="table(quotas.metric,quotas.limit,quotas.usage)"
-~~~
+```
 
-Filter the output for forwarding rules, addresses, backend services, health checks, and firewall rules. The number of mux Services that can be created in one project is approximately:
+The current controller writes a legacy `Endpoints` object for the mux. Endpoint data grows with channel count and backend replica count:
 
-~~~text
-max_muxes_by_project_quota = min(
-  remaining_regional_forwarding_rules,
-  remaining_regional_external_ipv4_addresses_if_static,
-  remaining_backend_services,
-  remaining_health_checks,
-  remaining_firewall_rules
-)
-~~~
-
-### Endpoint State Size
-
-The current implementation manages a legacy `Endpoints` object for the mux. Its data grows with both channel count and backend pod count:
-
-~~~text
+```text
 endpoint_entries ~= channel_count * ready_backend_endpoints_per_channel
-~~~
+```
 
-For example, 100 channels pointing at three ready pods each produces roughly 300 endpoint address entries in the mux Endpoints object. Kubernetes documents legacy Endpoints over-capacity behavior at 1000 endpoints, and large Endpoints objects are also harder for operators to inspect and for controllers to update safely. For high channel counts or large backend replica sets, split channels across muxes until the controller supports EndpointSlice natively.
+For high channel counts or large replica sets, split channels across muxes until EndpointSlice support lands.
 
-### Validation Commands
+## Validate Generated GCP Resources
 
-After deploying a mux, inspect the generated resources:
+Inspect Kubernetes state:
 
-~~~console
+```console
 kubectl get svc mux -n svc-mux -o wide
 kubectl get endpoints mux -n svc-mux -o yaml
-kubectl get configmap <mux-name>-port-allocations -n svc-mux -o yaml
-~~~
+kubectl get configmap mux-port-allocations -n svc-mux -o yaml
+kubectl get events -n svc-mux --sort-by=.lastTimestamp
+```
 
-Inspect Google Cloud load balancer resources:
+Inspect Google Cloud resources:
 
-~~~console
+```console
 gcloud compute forwarding-rules list \
   --regions $REGION \
-  --filter="IPAddress=34.83.176.141"
+  --filter="IPAddress=$MUX_IP"
+
+gcloud compute backend-services list \
+  --regions $REGION
 
 gcloud compute firewall-rules list \
-  --filter="network:default AND allowed.tcp:*"
-~~~
+  --filter="destinationRanges:$MUX_IP"
+```
 
-Confirm that the GKE-managed forwarding rule and firewall rule cover the mux port range. Public traffic should be tested against the mux external IP and every allocated channel port before considering the capacity test successful. For a stronger validation, run 100 channels backed by 100 different pods and verify that each external port returns the expected per-backend response body, not just a successful TCP connect.
+A validated GKE external mux should look like:
 
-The repository includes a pressure-test helper that generates 100 one-pod channel backends with distinct response bodies:
+```text
+reserved static IP
+  -> regional forwarding rule, TCP, portRange 20000-20099
+  -> regional backend service, protocol TCP
+  -> GCE_VM_IP NEG containing GKE nodes
+  -> GKE-managed firewall rule allowing mux Service ports
+```
 
-~~~console
+Public traffic should be tested against the mux external IP and every allocated channel port. The repository includes a pressure-test helper for 100 channels backed by 100 distinct pods:
+
+```console
 test-local/gke-pressure.py manifest \
   --namespace svc-mux-eip-test \
   --load-balancer-class svc-mux.nowake.ai/mux-eip.svc-mux-eip \
@@ -356,43 +301,37 @@ kubectl get configmap mux-eip-port-allocations \
   -o jsonpath='{.data.allocations\.json}' > /tmp/mux-eip-allocations.json
 
 test-local/gke-pressure.py probe \
-  --host 34.83.176.141 \
+  --host 203.0.113.10 \
   --allocations-json /tmp/mux-eip-allocations.json \
   --namespace svc-mux-eip-test
-~~~
+```
 
-The probe reads the mux allocation ConfigMap so it validates the actual `channel -> external port` mapping chosen by the controller. A successful run should report `ok=100 missing=0 failed=0`.
+A successful probe reports:
 
-### References
+```text
+ok=100 missing=0 failed=0
+```
 
-- [GKE Service LoadBalancer concepts](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/service-load-balancer)
-- [GKE Service LoadBalancer parameters](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/service-load-balancer-parameters)
-- [Cloud Load Balancing quotas and limits](https://cloud.google.com/load-balancing/quotas)
-- [VPC firewall rules limits](https://cloud.google.com/vpc/docs/firewalls#limits)
-- [GKE automatically created firewall rules](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/firewall-rules)
-- [Kubernetes Services: over-capacity Endpoints](https://kubernetes.io/docs/concepts/services-networking/service/#over-capacity-endpoints)
-- [Kubernetes EndpointSlices](https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/)
+See [gke-pressure-test-report.md](gke-pressure-test-report.md) for a sanitized validation report.
 
 ## Troubleshooting
 
-Check the mux Service and events:
+Common checks:
 
-```console
-kubectl describe svc mux -n svc-mux
-kubectl get events -n svc-mux --sort-by=.lastTimestamp
-```
+- Static IP is regional and in the same region as the cluster.
+- `loadBalancerClass` was set before Service creation.
+- Channel ports are named.
+- Channel Services use `allocateLoadBalancerNodePorts: false` unless NodePorts are intentionally required.
+- GitOps ignores mux `spec.ports` for controller-managed mux Services.
+- GKE-managed forwarding rule and firewall rule cover the mux port range.
+- `MuxPortConflict`, `MuxPortLimitExceeded`, and `InvalidPortMapping` events explain rejected channels.
 
-Check controller logs:
+## References
 
-```console
-kubectl logs -n svc-mux -l app.kubernetes.io/name=svc-mux -f
-```
-
-Common issues:
-
-- The static IP must be regional and in the same region as the GKE cluster.
-- Some load balancer annotations and Service fields are effectively immutable. Recreate the Service if changing load balancer mode.
-- Channel Service ports must be named. The controller rejects unnamed ports because it hashes `namespace/name/portName` into stable mux port names.
-- Channel Services should normally set `allocateLoadBalancerNodePorts: false`; the mux owns the provider load balancer ports.
-- If two channels on the same mux request the same external port and protocol, the controller emits a `MuxPortConflict` event and skips the conflicting channel mapping.
-- Firewall and health-check resources are managed by GKE for the Service load balancer. If traffic does not pass, inspect the generated forwarding rule, backend service, health check, and firewall rules in the Google Cloud project.
+- [GKE Service LoadBalancer concepts](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/service-load-balancer)
+- [GKE Service LoadBalancer parameters](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/service-load-balancer-parameters)
+- [GKE automatically created firewall rules](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/firewall-rules)
+- [Cloud Load Balancing quotas and limits](https://cloud.google.com/load-balancing/quotas)
+- [VPC firewall rules limits](https://cloud.google.com/vpc/docs/firewalls#limits)
+- [Kubernetes Services: over-capacity Endpoints](https://kubernetes.io/docs/concepts/services-networking/service/#over-capacity-endpoints)
+- [Kubernetes EndpointSlices](https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/)

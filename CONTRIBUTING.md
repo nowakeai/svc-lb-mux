@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for improving Service LoadBalancer Multiplexer. Keep changes small, reviewable, and aligned with Kubernetes controller and Helm chart conventions.
+Thanks for improving Service LoadBalancer Multiplexer. Keep changes small, reviewable, and aligned with Kubernetes controller and Helm chart conventions. Participation is governed by [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and contributions are accepted under the project [Apache-2.0 license](LICENSE).
 
 ## Development Setup
 
@@ -51,3 +51,4 @@ Before opening a PR, verify:
 - Helm chart lints and renders.
 - Docker image builds locally when runtime dependencies or source layout changes.
 - Documentation examples match the chart defaults.
+- Public docs avoid environment-specific names, IPs, secrets, and private infrastructure details.
