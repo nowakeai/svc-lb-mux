@@ -69,6 +69,14 @@ This file defines repository-specific constraints for AI agents and human contri
   - A channel is an application-facing `LoadBalancer` Service that points at a mux.
 - Avoid implying that recommended names are mandatory.
 
+## Release Rules
+
+- Release tags must be created from a clean, validated `main` branch.
+- After every release workflow finishes, review the GitHub release page and release notes manually.
+- Check that release notes mention the important user-facing changes, artifacts, known limitations, and any migration or upgrade notes.
+- If the generated release notes miss important context, update the release notes before announcing the release.
+- Verify that the expected GHCR image tags and Helm chart asset exist before treating a release as complete.
+
 ## Validation
 
 Run the smallest relevant validation for the change. For broad changes, run:
