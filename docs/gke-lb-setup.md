@@ -57,7 +57,7 @@ Install with defaults:
 kubectl create namespace svc-mux
 helm install svc-mux ./chart \
   --namespace svc-mux \
-  --set image.tag=latest
+  --set image.tag=0.1.0
 
 kubectl get svc mux -n svc-mux -w
 ```
@@ -95,7 +95,7 @@ defaultLoadBalancer:
 ```console
 helm upgrade --install svc-mux ./chart \
   --namespace svc-mux \
-  --set image.tag=latest \
+  --set image.tag=0.1.0 \
   --set defaultLoadBalancer.loadBalancerIP=$MUX_IP
 ```
 
@@ -114,7 +114,7 @@ defaultLoadBalancer:
 ```console
 helm upgrade --install svc-mux ./chart \
   --namespace svc-mux \
-  --set image.tag=latest \
+  --set image.tag=0.1.0 \
   --set-string defaultLoadBalancer.annotations.networking\.gke\.io/load-balancer-ip-addresses=$ADDRESS_NAME \
   --set defaultLoadBalancer.loadBalancerClass=networking.gke.io/l4-regional-external
 ```

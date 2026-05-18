@@ -21,7 +21,6 @@ Pipfile.lock
 
 # Go build artifacts
 tools/rlpx-verify/rlpx-verify
-tools/rlpx-verify/go.sum
 
 # IDE and editor files
 .vscode/

@@ -1,6 +1,6 @@
 [project]
 name = "svc-lb-mux"
-version = "0.2.3"
+version = "0.1.0"
 description = "Service LoadBalancer Multiplexer for Kubernetes"
 readme = "README.md"
 requires-python = ">=3.13"

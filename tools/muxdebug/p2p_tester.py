@@ -70,8 +70,11 @@ def _build_rlpx_helper() -> bool:
         return False
 
 
-# Try to build helper if needed, then check availability
-HAS_RLPX_HELPER = _build_rlpx_helper()
+def _has_rlpx_helper() -> bool:
+    return RLPX_HELPER.exists() and RLPX_HELPER.is_file() and bool(RLPX_HELPER.stat().st_mode & 0o111)
+
+
+HAS_RLPX_HELPER = _has_rlpx_helper()
 
 
 class P2PTester:
@@ -204,8 +207,10 @@ class P2PTester:
     ) -> Tuple[TestResult, str]:
         """Test devp2p protocol handshake (RLPx) and verify peer ID"""
 
-        # Try Go RLPx helper first if available and we have peer ID
-        if HAS_RLPX_HELPER and expected_peer_id:
+        # Try Go RLPx helper first if available and we have peer ID. Build it
+        # lazily so read-only commands such as --help/list do not run compilers.
+        has_rlpx_helper = HAS_RLPX_HELPER or (expected_peer_id and _build_rlpx_helper())
+        if has_rlpx_helper and expected_peer_id:
             try:
                 logger.info("Attempting RLPx handshake using Go helper")
                 logger.debug(f"  Target: {hostname}:{port}")

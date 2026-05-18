@@ -383,6 +383,8 @@ Common warning/error events:
 
 ## Debug Web UI
 
+The debug web UI is WIP in this release. It currently provides basic runtime inspection and optional connectivity probes, but the product surface, plugin model, authentication model, and provider-specific diagnostics are still under active design.
+
 The controller can start a FastAPI debug webserver on `DEBUG_WEB_PORT`, default `8080`.
 
 Implemented routes and behavior:

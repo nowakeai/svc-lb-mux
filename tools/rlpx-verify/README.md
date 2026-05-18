@@ -1,10 +1,10 @@
 # RLPx Verification Tool
 
-A lightweight Go tool for verifying Ethereum RLPx protocol handshakes using the official `go-ethereum` library.
+A lightweight experimental Go tool for verifying Ethereum RLPx protocol handshakes using the official `go-ethereum` library.
 
 ## Purpose
 
-This tool provides complete RLPx handshake verification for the `mux-debug` Python script. It's an optional dependency that enables full P2P protocol validation.
+This tool provides RLPx handshake verification for the `mux-debug` Python script. It is an optional dependency that enables deeper P2P protocol validation and is not required for Service LoadBalancer Multiplexer controller operation.
 
 ## Features
 

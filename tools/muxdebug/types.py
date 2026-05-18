@@ -43,7 +43,7 @@ class PortRoute:
     channel_name: str
     channel_namespace: str
     channel_port: int
-    node_port: int
+    node_port: Optional[int] = None
     target_pods: List[PodInfo] = field(default_factory=list)
     port_hash: Optional[str] = None
     channel_external_dns: Optional[str] = None

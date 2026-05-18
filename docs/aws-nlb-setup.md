@@ -50,7 +50,7 @@ helm upgrade --install svc-mux ./chart \
   --namespace svc-mux \
   --create-namespace \
   --values aws-values.yaml \
-  --set image.tag=latest
+  --set image.tag=0.1.0
 ```
 
 The chart skips annotations with empty values, so `cloud.google.com/l4-rbs: ""` removes the GKE default annotation from the rendered mux Service.

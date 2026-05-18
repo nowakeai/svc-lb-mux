@@ -1,6 +1,10 @@
 # Service LoadBalancer Multiplexer Debug Tool
 
-`mux-debug` is a helper CLI for inspecting mux Services, channel Services, endpoints, and P2P connectivity in Kubernetes clusters.
+`mux-debug` is an experimental helper CLI for inspecting mux Services, channel Services, endpoints, and P2P connectivity in Kubernetes clusters. It is not part of the controller runtime and is maintained as a best-effort operator aid.
+
+## Status
+
+This tool is WIP. The generic mux inspection commands should remain useful, but P2P-specific diagnostics are optional and intentionally separate from the controller product surface. Treat provider- or protocol-specific checks as experimental.
 
 ## Install Dependencies
 

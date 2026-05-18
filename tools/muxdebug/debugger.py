@@ -107,8 +107,9 @@ class MuxDebugger:
             channel_namespace = metadata["namespace"]
             annotations = metadata.get("annotations", {})
 
-            # Parse port mappings
+            # Parse controller-written port mappings such as: http:8080->20000
             ports_anno = annotations.get(f"{API_PREFIX}/ports", "")
+            mux_ports_by_name = self._parse_channel_port_mappings(ports_anno)
 
             # Get external-dns annotation for channel
             channel_external_dns = annotations.get("external-dns.alpha.kubernetes.io/hostname")
@@ -119,29 +120,25 @@ class MuxDebugger:
             )
             pod_infos = self._extract_pod_infos(endpoints) if endpoints else []
 
-            # Build routes for each port
+            # Build routes for each port. Current controller versions write the
+            # mux external port to the <api-prefix>/ports annotation; channel
+            # Services normally have allocateLoadBalancerNodePorts=false.
             for port in spec.get("ports", []):
-                node_port = port.get("nodePort")
-                if not node_port:
+                port_name = port.get("name")
+                mux_port = mux_ports_by_name.get(port_name, port.get("port"))
+                if not mux_port:
                     continue
 
                 route = PortRoute(
-                    mux_port=node_port,  # In mux, the port is the nodePort
-                    protocol=port["protocol"],
+                    mux_port=mux_port,
+                    protocol=port.get("protocol", "TCP"),
                     channel_name=channel_name,
                     channel_namespace=channel_namespace,
                     channel_port=port["port"],
-                    node_port=node_port,
+                    node_port=port.get("nodePort"),
                     target_pods=pod_infos,
                     channel_external_dns=channel_external_dns,
                 )
-
-                # Try to find port hash from annotation
-                if ports_anno:
-                    for part in ports_anno.split(","):
-                        if f"){node_port}:" in part:
-                            route.port_hash = part.split(")")[0].strip("(")
-                            break
 
                 routes.append(route)
 
@@ -162,6 +159,25 @@ class MuxDebugger:
             return parts[0], parts[1]
         else:
             return parts[0], default_namespace
+
+    def _parse_channel_port_mappings(self, value: str) -> Dict[str, int]:
+        """Parse <api-prefix>/ports annotation into {port_name: mux_port}."""
+        mappings = {}
+        if not value:
+            return mappings
+
+        for item in value.split(","):
+            item = item.strip()
+            if not item or ":" not in item or "->" not in item:
+                continue
+            port_name, rest = item.split(":", 1)
+            _, mux_port_text = rest.split("->", 1)
+            try:
+                mappings[port_name.strip()] = int(mux_port_text.strip())
+            except ValueError:
+                logger.debug("Invalid mux port mapping annotation item: %s", item)
+
+        return mappings
 
     def _extract_pod_infos(self, endpoints: Dict) -> List[PodInfo]:
         """Extract pod information from endpoints"""
@@ -250,7 +266,7 @@ class MuxDebugger:
                 continuation = "   " if is_last else "│  "
                 print(f"│  {continuation}    ↓")
                 print(f"│  {continuation}    Service Port: {route.channel_port}")
-                print(f"│  {continuation}    NodePort: {route.node_port}")
+                print(f"│  {continuation}    NodePort: {route.node_port or 'N/A'}")
 
                 # Display target pods
                 if route.target_pods:

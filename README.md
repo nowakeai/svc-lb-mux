@@ -75,7 +75,7 @@ Builds from this repository publish images to `ghcr.io/nowakeai/svc-lb-mux`. Ins
 kubectl create namespace svc-mux
 helm install svc-mux ./chart \
   --namespace svc-mux \
-  --set image.tag=latest
+  --set image.tag=0.1.0
 ```
 
 The default chart creates a mux Service named `mux` in namespace `svc-mux`. These are defaults, not requirements.
@@ -163,7 +163,7 @@ See [docs/gitops.md](docs/gitops.md) for Argo CD and Flux examples.
 
 ## Debug UI
 
-The debug UI is enabled by default on port `8080` and requires a token by default. Helm generates a Secret if no token is provided. Mutating debug actions are disabled unless explicitly enabled.
+The debug UI is **WIP** in this release. It is useful for basic state and topology inspection, but the product surface, plugin model, security hardening, and advanced diagnostics still need more work. It is enabled by default on port `8080` and requires a token by default. Helm generates a Secret if no token is provided. Mutating debug actions are disabled unless explicitly enabled.
 
 ```console
 kubectl get secret -n svc-mux svc-mux-debug-token -o jsonpath='{.data.token}' | base64 -d
@@ -171,6 +171,16 @@ kubectl port-forward -n svc-mux deployment/svc-mux 8080:8080
 ```
 
 Open <http://localhost:8080> and use any username with the token as the password.
+
+## TODOs
+
+Important follow-up work before treating `svc-lb-mux` as a broadly complete product:
+
+- **Debug Web UI**: rebuild the WIP UI into a modular, production-oriented operator console with clearer topology views, safer authentication and authorization, audit-friendly actions, and extensible diagnostics.
+- **Debug plugins**: move protocol-specific diagnostics into opt-in plugins, starting with workloads such as `devp2p`, so the core controller stays provider- and protocol-neutral.
+- **EndpointSlice support**: add EndpointSlice aggregation alongside the current Endpoints path, with readable generated resources and better scaling characteristics for large channel sets.
+- **GitOps hardening**: continue reducing controller/GitOps drift risk, especially around generated mux ports, allocation state, status fields, and provider-managed annotations.
+- **Provider validation**: expand repeatable pressure tests and compatibility reports for GKE, EKS, and additional Kubernetes providers.
 
 ## Documentation
 

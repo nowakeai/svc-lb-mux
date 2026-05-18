@@ -2,11 +2,13 @@ package main
 
 import (
 	"crypto/ecdsa"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -143,25 +145,18 @@ func parseEnode(enodeURL string) ([]byte, string, error) {
 	}
 
 	// Decode pubkey
-	nodeID := make([]byte, 64)
-	for i := 0; i < 64; i++ {
-		var b byte
-		fmt.Sscanf(pubkeyHex[i*2:i*2+2], "%02x", &b)
-		nodeID[i] = b
+	nodeID, err := hex.DecodeString(pubkeyHex)
+	if err != nil {
+		return nil, "", fmt.Errorf("invalid pubkey hex: %w", err)
+	}
+	if len(nodeID) != 64 {
+		return nil, "", fmt.Errorf("invalid decoded pubkey length: expected 64 bytes, got %d", len(nodeID))
 	}
 
-	// Extract host:port (after @ and before optional ?)
+	// Extract host:port (after @ and before optional query parameters)
 	addr := enodeURL[atIndex+1:]
-	if qIndex := -1; qIndex != -1 {
-		for i := 0; i < len(addr); i++ {
-			if addr[i] == '?' {
-				qIndex = i
-				break
-			}
-		}
-		if qIndex != -1 {
-			addr = addr[:qIndex]
-		}
+	if qIndex := strings.IndexByte(addr, '?'); qIndex != -1 {
+		addr = addr[:qIndex]
 	}
 
 	return nodeID, addr, nil
