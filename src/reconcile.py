@@ -10,6 +10,7 @@ from config import (
     ANNOTATION_CHANNELS,
     ANNOTATION_MANAGED,
     ANNOTATION_EXTERNAL_PORTS,
+    ANNOTATION_MAX_PORTS,
     ANNOTATION_PORTS,
     DRYRUN_MODE,
     annotation_key,
@@ -59,6 +60,29 @@ def validate_port_number(value, field: str) -> int:
     if not 1 <= port <= 65535:
         raise ValueError(f"Invalid {field} port {port}; expected 1-65535")
     return port
+
+
+def requested_max_ports(mux):
+    value = mux.annotations.get(ANNOTATION_MAX_PORTS, "")
+    if value in (None, ""):
+        return None
+    try:
+        max_ports = int(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"Invalid {ANNOTATION_MAX_PORTS} value {value!r}; expected integer") from error
+    if max_ports < 1:
+        raise ValueError(f"Invalid {ANNOTATION_MAX_PORTS} value {max_ports}; expected >= 1")
+    return max_ports
+
+
+def channel_declared_port_count(channel):
+    return len(channel.get("spec", {}).get("ports", []))
+
+
+def would_exceed_mux_port_limit(current_ports, channel, max_ports):
+    if max_ports is None:
+        return False
+    return len(current_ports) + channel_declared_port_count(channel) > max_ports
 
 
 def resolve_channel_external_port(port, explicit_ports, allocator=None, channel=None):

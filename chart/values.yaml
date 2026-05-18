@@ -179,7 +179,10 @@ defaultLoadBalancer:
   allocateLoadBalancerNodePorts: true
   # Optional mux external port range for channel annotations that request auto allocation.
   # Example channel annotation: svc-mux.nowake.ai/external-ports: "http:auto"
-  portRange: "20000-21000"
-  # Optional ConfigMap name for stable auto-allocated port mappings.
+  portRange: "20000-20099"
+  # Optional max mux Service ports. GKE Service LoadBalancer supports up to 100 unique ports.
+  maxPorts: 100
+  # Optional per-mux ConfigMap name for stable auto-allocated port mappings.
   # Defaults to <mux-name>-port-allocations when portRange is enabled.
+  # Do not reuse the same allocation ConfigMap name for multiple muxes.
   allocationConfigMapName: ""

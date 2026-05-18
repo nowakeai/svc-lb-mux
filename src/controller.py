@@ -43,7 +43,9 @@ from reconcile import (
     get_old_endpoints_set,
     find_mux_port_conflicts,
     process_channel_ports,
+    requested_max_ports,
     update_channel_service_metadata,
+    would_exceed_mux_port_limit,
 )
 from refs import get_mux_from_lb_class
 
@@ -434,6 +436,16 @@ def mux_daemon(
         ports = set()
         port_owners = {}
 
+        try:
+            max_ports = requested_max_ports(mux)
+        except ValueError as error:
+            events.error(
+                body,
+                reason="InvalidMaxPorts",
+                message=str(error),
+            )
+            max_ports = 0
+
         sorted_channels = sorted(
             tuple(channels),
             key=lambda item: (item["metadata"]["namespace"], item["metadata"]["name"]),
@@ -442,6 +454,17 @@ def mux_daemon(
             mux, mux_key, sorted_channels, body
         )
         for ch in sorted_channels:
+            if would_exceed_mux_port_limit(ports, ch, max_ports):
+                events.error(
+                    ch,
+                    reason="MuxPortLimitExceeded",
+                    message=(
+                        f"mux {namespace}/{name} is limited to {max_ports} port(s); "
+                        f"skipping channel would exceed the GKE Service LoadBalancer port limit"
+                    ),
+                )
+                continue
+
             try:
                 ch_ports, ch_ports_anno, channel_service = process_channel_ports(
                     ch, memo, allocator=allocator

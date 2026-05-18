@@ -13,7 +13,7 @@ The key rule is simple: GitOps may create mux and channel Services, but the cont
 | Additional mux Service | Name, namespace, provider annotations, labels, `type`, `loadBalancerClass`, static IP settings | `spec.ports`, mux runtime annotations |
 | Channel Service | Selector, app-facing `spec.ports`, `loadBalancerClass`, user annotations | `status.loadBalancer`, `<api-prefix>/ports` annotation |
 | Mux Endpoints | Do not manage from Git | Whole generated Endpoints object |
-| Port allocation ConfigMap | Do not manage from Git, unless repairing state manually | `allocations.json` and metadata |
+| Per-mux port allocation ConfigMap | Do not manage from Git, unless repairing state manually | `allocations.json` and metadata |
 
 Controller-owned annotations use the configured API prefix. With the default prefix, those include:
 
@@ -79,7 +79,7 @@ metadata:
     svc-mux.nowake.ai/channels: '["app/api"]'
 ```
 
-When automatic port allocation is enabled, the allocation ConfigMap is also controller-owned. It stores stable `external-ports: "name:auto"` assignments in `allocations.json`. Do not overwrite it from Git unless you are intentionally repairing allocation state.
+When automatic port allocation is enabled, each mux gets its own controller-owned allocation ConfigMap. It stores stable `external-ports: "name:auto"` assignments in `allocations.json`, plus mux owner metadata. Do not overwrite it from Git unless you are intentionally repairing allocation state, and do not point multiple muxes at the same allocation ConfigMap.
 
 ## Annotation Drift
 
@@ -277,7 +277,7 @@ Inspect controller-owned state with:
 ```console
 kubectl describe svc mux -n svc-mux
 kubectl get endpoints mux -n svc-mux -o yaml
-kubectl get configmap mux-port-allocations -n svc-mux -o yaml
+kubectl get configmap <mux-name>-port-allocations -n svc-mux -o yaml
 kubectl get events -n svc-mux --sort-by=.lastTimestamp
 ```
 

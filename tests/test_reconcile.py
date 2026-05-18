@@ -19,6 +19,8 @@ from reconcile import (
     parse_external_ports_annotation,
     port_hash,
     process_channel_ports,
+    requested_max_ports,
+    would_exceed_mux_port_limit,
 )
 
 
@@ -47,6 +49,30 @@ class ReconcileHelperTest(unittest.TestCase):
             [{"name": "abc1234", "port": 30080, "protocol": "TCP"}],
         )
 
+
+
+    def test_requested_max_ports_parses_annotation(self):
+        mux = FakeMux(annotations={"svc-mux.nowake.ai/max-ports": "100"})
+
+        self.assertEqual(requested_max_ports(mux), 100)
+
+    def test_requested_max_ports_rejects_invalid_values(self):
+        mux = FakeMux(annotations={"svc-mux.nowake.ai/max-ports": "0"})
+
+        with self.assertRaisesRegex(ValueError, "expected >= 1"):
+            requested_max_ports(mux)
+
+    def test_would_exceed_mux_port_limit_counts_channel_ports(self):
+        current = {MuxPort("a", 20000, "TCP")}
+        channel = channel_service(
+            ports=[
+                {"name": "http", "port": 80, "protocol": "TCP"},
+                {"name": "grpc", "port": 81, "protocol": "TCP"},
+            ]
+        )
+
+        self.assertTrue(would_exceed_mux_port_limit(current, channel, 2))
+        self.assertFalse(would_exceed_mux_port_limit(current, channel, 3))
 
     def test_find_mux_port_conflicts_does_not_commit_conflicting_channel(self):
         channel = channel_service(
@@ -352,6 +378,11 @@ def channel_service(name="api", namespace="app", annotations=None, ports=None):
         },
     }
 
+
+
+class FakeMux:
+    def __init__(self, annotations=None):
+        self.annotations = annotations or {}
 
 class FakeService:
     def __init__(self, body):

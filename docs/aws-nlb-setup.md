@@ -126,7 +126,8 @@ Each `(external port, protocol)` pair can be used by only one channel on the sam
 ```yaml
 defaultLoadBalancer:
   portRange: "20000-21000"
-  allocationConfigMapName: "mux-port-allocations"
+  # Optional per-mux override. Defaults to <mux-name>-port-allocations.
+  allocationConfigMapName: ""
 ```
 
 ```yaml
@@ -135,7 +136,7 @@ metadata:
     svc-mux.nowake.ai/external-ports: "p2p:auto"
 ```
 
-Automatic assignments are stored in a ConfigMap so the mapping remains stable across controller restarts and GitOps re-application. Conflicts are reported with a `MuxPortConflict` event.
+Automatic assignments are stored in one ConfigMap per mux so the mapping remains stable across controller restarts and GitOps re-application without coupling unrelated muxes to the same object size or update stream. Do not reuse the same allocation ConfigMap name for multiple muxes. Conflicts are reported with a `MuxPortConflict` event.
 
 ## Troubleshooting
 

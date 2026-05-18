@@ -14,6 +14,9 @@ metadata:
     {{- with .Values.defaultLoadBalancer.portRange }}
     {{ printf "%s/port-range" $.Values.api.prefix | quote }}: {{ . | quote }}
     {{- end }}
+    {{- with .Values.defaultLoadBalancer.maxPorts }}
+    {{ printf "%s/max-ports" $.Values.api.prefix | quote }}: {{ . | quote }}
+    {{- end }}
     {{- with .Values.defaultLoadBalancer.allocationConfigMapName }}
     {{ printf "%s/allocation-configmap" $.Values.api.prefix | quote }}: {{ . | quote }}
     {{- end }}

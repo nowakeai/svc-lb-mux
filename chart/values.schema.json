@@ -337,8 +337,14 @@
           "type": "string",
           "pattern": "^$|^[0-9]+(-[0-9]+)?(,[ ]*[0-9]+(-[0-9]+)?)*$"
         },
+        "maxPorts": {
+          "type": ["integer", "null"],
+          "description": "Optional max mux Service ports. Use 100 for GKE Service LoadBalancer compatibility.",
+          "minimum": 1
+        },
         "allocationConfigMapName": {
           "type": "string",
+          "description": "Optional per-mux ConfigMap name for stable auto-allocated port mappings. Leave empty to use <mux-name>-port-allocations. Do not reuse one name for multiple muxes.",
           "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
         }
       }

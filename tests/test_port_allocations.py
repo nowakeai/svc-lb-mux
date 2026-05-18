@@ -6,10 +6,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from port_allocations import (
     ALLOCATIONS_KEY,
+    ConfigMapAllocationStore,
     PortAllocationRef,
     PortAllocator,
     decode_state,
     default_allocation_configmap_name,
+    allocation_configmap_name,
     encode_state,
     parse_port_ranges,
 )
@@ -240,6 +242,114 @@ class PortAllocationTest(unittest.TestCase):
     def test_default_configmap_name_is_dns_label_sized(self):
         name = default_allocation_configmap_name("m" * 80)
         self.assertLessEqual(len(name), 63)
+
+    def test_store_saves_mux_owner_metadata_and_state(self):
+        MemoryConfigMap.objects.clear()
+        store = ConfigMapAllocationStore(
+            "svc-mux",
+            "mux-port-allocations",
+            ("svc-mux", "mux"),
+            configmap_factory=MemoryConfigMap,
+        )
+
+        store.save({"allocations": []})
+
+        saved = MemoryConfigMap.objects[("svc-mux", "mux-port-allocations")]
+        self.assertEqual(
+            saved["metadata"]["annotations"]["svc-mux.nowake.ai/mux"],
+            "svc-mux/mux",
+        )
+        self.assertEqual(
+            decode_state(saved["data"])["mux"],
+            {"namespace": "svc-mux", "name": "mux"},
+        )
+
+    def test_store_rejects_configmap_owned_by_another_mux(self):
+        MemoryConfigMap.objects.clear()
+        MemoryConfigMap.objects[("svc-mux", "shared-port-allocations")] = {
+            "metadata": {
+                "name": "shared-port-allocations",
+                "namespace": "svc-mux",
+                "annotations": {"svc-mux.nowake.ai/mux": "svc-mux/other"},
+            },
+            "data": encode_state(
+                {
+                    "schemaVersion": 1,
+                    "mux": {"namespace": "svc-mux", "name": "other"},
+                    "allocations": [],
+                }
+            ),
+        }
+        store = ConfigMapAllocationStore(
+            "svc-mux",
+            "shared-port-allocations",
+            ("svc-mux", "mux"),
+            configmap_factory=MemoryConfigMap,
+        )
+
+        with self.assertRaisesRegex(ValueError, "one allocation ConfigMap per mux"):
+            store.load()
+
+    def test_allocation_configmap_name_defaults_per_mux(self):
+        first = mux_service("mux")
+        second = mux_service("payments")
+
+        self.assertEqual(allocation_configmap_name(first), "mux-port-allocations")
+        self.assertEqual(
+            allocation_configmap_name(second), "payments-port-allocations"
+        )
+
+
+
+class MemoryConfigMap:
+    objects = {}
+
+    def __init__(self, raw):
+        self.raw = raw
+
+    @property
+    def key(self):
+        metadata = self.raw["metadata"]
+        return (metadata["namespace"], metadata["name"])
+
+    def exists(self):
+        if self.key in self.objects:
+            self.raw = self._copy(self.objects[self.key])
+            return True
+        return False
+
+    def refresh(self):
+        self.raw = self._copy(self.objects[self.key])
+
+    def patch(self, patch):
+        current = self._copy(self.objects[self.key])
+        current.setdefault("metadata", {}).setdefault("annotations", {}).update(
+            patch.get("metadata", {}).get("annotations", {})
+        )
+        if "data" in patch:
+            current["data"] = patch["data"]
+        self.objects[self.key] = current
+        self.raw = self._copy(current)
+
+    def create(self):
+        self.objects[self.key] = self._copy(self.raw)
+
+    @staticmethod
+    def _copy(value):
+        import copy
+
+        return copy.deepcopy(value)
+
+
+def mux_service(name="mux", namespace="svc-mux", annotations=None):
+    class Mux:
+        pass
+
+    mux = Mux()
+    mux.name = name
+    mux.namespace = namespace
+    mux.annotations = annotations or {}
+    return mux
 
 
 def channel_service(name="api", namespace="app", port_name="http", protocol="TCP"):

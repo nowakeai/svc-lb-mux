@@ -187,20 +187,29 @@ class ConfigMapAllocationStore:
         self.configmap = self._new_configmap({})
         self.exists = False
 
+    @property
+    def mux_ref(self):
+        return f"{self.mux_key[0]}/{self.mux_key[1]}"
+
     def load(self):
         if self.configmap.exists():
             self.configmap.refresh()
             self.exists = True
-            return decode_state(self.configmap.raw.get("data", {}))
+            self._validate_configmap_owner()
+            state = decode_state(self.configmap.raw.get("data", {}))
+            self._validate_state_owner(state)
+            return state
         self.exists = False
         return {}
 
     def save(self, state):
+        state = self._state_for_mux(state)
         data = encode_state(state)
         if DRYRUN_MODE:
             return
+        metadata = {"annotations": {annotation_key("mux"): self.mux_ref}}
         if self.exists:
-            self.configmap.patch({"data": data})
+            self.configmap.patch({"metadata": metadata, "data": data})
         else:
             self.configmap = self._new_configmap(data)
             self.configmap.create()
@@ -217,13 +226,42 @@ class ConfigMapAllocationStore:
                         "app.kubernetes.io/component": "port-allocation",
                     },
                     "annotations": {
-                        annotation_key("mux"): f"{self.mux_key[0]}/{self.mux_key[1]}",
+                        annotation_key("mux"): self.mux_ref,
                     },
                 },
                 "data": data,
             }
         )
 
+    def _state_for_mux(self, state):
+        result = dict(state or {})
+        result["schemaVersion"] = SCHEMA_VERSION
+        result["mux"] = {"namespace": self.mux_key[0], "name": self.mux_key[1]}
+        return result
+
+    def _validate_configmap_owner(self):
+        owner = (
+            self.configmap.raw.get("metadata", {})
+            .get("annotations", {})
+            .get(annotation_key("mux"))
+        )
+        if owner and owner != self.mux_ref:
+            raise ValueError(
+                f"Port allocation ConfigMap {self.namespace}/{self.name} is owned by mux {owner}; "
+                f"expected {self.mux_ref}. Use one allocation ConfigMap per mux."
+            )
+
+    def _validate_state_owner(self, state):
+        mux = state.get("mux") if state else None
+        if not mux:
+            return
+        namespace = mux.get("namespace")
+        name = mux.get("name")
+        if (namespace, name) != self.mux_key:
+            raise ValueError(
+                f"Port allocation ConfigMap {self.namespace}/{self.name} contains state for mux "
+                f"{namespace}/{name}; expected {self.mux_ref}. Use one allocation ConfigMap per mux."
+            )
 
 def encode_state(state):
     return {ALLOCATIONS_KEY: json.dumps(state, indent=2, sort_keys=True)}

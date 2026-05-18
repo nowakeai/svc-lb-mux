@@ -100,11 +100,12 @@ defaultLoadBalancer:
   loadBalancerIP: ""
   loadBalancerClass: ""
   allocateLoadBalancerNodePorts: true
-  portRange: "20000-21000"
+  portRange: "20000-20099"
+  maxPorts: 100
   allocationConfigMapName: ""
 ```
 
-The default chart values target GKE. See [docs/gke-lb-setup.md](docs/gke-lb-setup.md) for GKE architecture, static IP binding, and provider-specific options. For EKS/NLB deployments, see [docs/aws-nlb-setup.md](docs/aws-nlb-setup.md).
+The default chart values target GKE. See [docs/gke-lb-setup.md](docs/gke-lb-setup.md) for GKE architecture, static IP binding, capacity planning, and provider-specific options. For EKS/NLB deployments, see [docs/aws-nlb-setup.md](docs/aws-nlb-setup.md).
 
 If a multiplexer has no channels, the controller keeps a placeholder `101/TCP` port. When GitOps manages the mux Service, that placeholder must not be treated as the desired runtime port list: the controller owns mux `spec.ports` and rewrites it from channel mappings. Configure GitOps to ignore mux `spec.ports`; see [docs/gitops.md](docs/gitops.md).
 
@@ -155,8 +156,10 @@ For automatic assignment, configure a mux port range and request `auto` on the c
 
 ```yaml
 defaultLoadBalancer:
-  portRange: "20000-21000"
-  allocationConfigMapName: "mux-port-allocations"
+  portRange: "20000-20099"
+  maxPorts: 100
+  # Optional per-mux override. Defaults to <mux-name>-port-allocations.
+  allocationConfigMapName: ""
 ```
 
 ```yaml
@@ -165,7 +168,7 @@ metadata:
     svc-mux.nowake.ai/external-ports: "http:auto"
 ```
 
-The controller stores automatic assignments in a ConfigMap so mappings stay stable across restarts and Service re-application. The ConfigMap data contains an `allocations.json` entry with the mux reference, channel namespace/name, port name, protocol, assigned port, and source. Port names are the stable identity for mappings. Within one mux, each `(external port, protocol)` pair can be claimed by only one channel.
+The controller stores automatic assignments in one ConfigMap per mux so mappings stay stable across restarts and Service re-application without coupling unrelated muxes to the same object size or update stream. The ConfigMap data contains an `allocations.json` entry with the mux reference, channel namespace/name, port name, protocol, assigned port, and source. Port names are the stable identity for mappings. Within one mux, each `(external port, protocol)` pair can be claimed by only one channel. Do not reuse the same allocation ConfigMap name for multiple muxes.
 
 ## Debug Web UI
 
