@@ -9,7 +9,7 @@ The repository is split into application code and deployment packaging:
 - `Dockerfile`: controller image build
 - `.github/workflows/ci.yml`: validation and GHCR image publishing
 
-The Kubernetes API prefix is configurable through `api.prefix`. New installs default to `svc-mux.nowake.ai`; existing prefixes can be kept in `api.legacyPrefixes` for migration compatibility.
+The Kubernetes API prefix is configurable through `api.prefix`. New installs default to `svc-mux.nowake.ai`.
 
 ## Concepts
 
@@ -36,10 +36,9 @@ New resources use `svc-mux.nowake.ai` by default:
 ```yaml
 api:
   prefix: svc-mux.nowake.ai
-  legacyPrefixes: []
 ```
 
-During migration, put any existing prefix in `api.legacyPrefixes`. The controller writes new annotations and finalizers with `api.prefix`, while reads and `loadBalancerClass` parsing accept both the primary prefix and legacy prefixes.
+Set `api.prefix` in your values file when a deployment needs a different API prefix. The controller reads and writes annotations, finalizers, and `loadBalancerClass` values using that single configured prefix.
 
 ## Default LoadBalancer
 

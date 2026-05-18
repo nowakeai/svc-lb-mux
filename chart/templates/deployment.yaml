@@ -69,8 +69,6 @@ spec:
                   fieldPath: metadata.name
             - name: API_PREFIX
               value: {{ .Values.api.prefix | quote }}
-            - name: LEGACY_API_PREFIXES
-              value: {{ join "," .Values.api.legacyPrefixes | quote }}
             {{- if .Values.debugWeb.enabled }}
             - name: DEBUG_WEB_ENABLED
               value: "true"

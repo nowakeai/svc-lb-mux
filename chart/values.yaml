@@ -1,9 +1,6 @@
 api:
-  # Primary annotation/finalizer/loadBalancerClass prefix used for new resources.
+  # Annotation/finalizer/loadBalancerClass prefix used by the controller.
   prefix: svc-mux.nowake.ai
-  # Additional prefixes accepted for compatibility with existing resources.
-  legacyPrefixes:
-    - lb4-multiplexer.altlayer.io
 
 replicaCount: 1
 

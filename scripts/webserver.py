@@ -27,14 +27,6 @@ logger = logging.getLogger(__name__)
 DRYRUN_MODE = os.environ.get("DRYRUN_MODE", "").lower() in ("true", "1", "yes", "on")
 
 API_PREFIX = os.environ.get("API_PREFIX", "svc-mux.nowake.ai").strip() or "svc-mux.nowake.ai"
-LEGACY_API_PREFIXES = tuple(
-    prefix.strip()
-    for prefix in os.environ.get(
-        "LEGACY_API_PREFIXES", "lb4-multiplexer.altlayer.io"
-    ).split(",")
-    if prefix.strip() and prefix.strip() != API_PREFIX
-)
-API_PREFIXES = (API_PREFIX, *LEGACY_API_PREFIXES)
 
 # Authentication token from environment variable
 # If set, all web UI requests must provide this token
@@ -116,11 +108,7 @@ async def auth_middleware(request, handler):
 
 
 def get_annotation(annotations: dict, name: str, default=None):
-    for prefix in API_PREFIXES:
-        key = f"{prefix}/{name}"
-        if key in annotations:
-            return annotations[key]
-    return default
+    return annotations.get(f"{API_PREFIX}/{name}", default)
 
 
 def record_event(event_type: str, resource: str, message: str):

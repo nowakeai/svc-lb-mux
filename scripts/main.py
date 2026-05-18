@@ -44,14 +44,6 @@ DEBUG_WEB_PORT = int(os.environ.get("DEBUG_WEB_PORT", "8080"))
 DAEMON_QUEUE_TIMEOUT = 10  # seconds to wait for queue events
 
 API_PREFIX = os.environ.get("API_PREFIX", "svc-mux.nowake.ai").strip() or "svc-mux.nowake.ai"
-LEGACY_API_PREFIXES = tuple(
-    prefix.strip()
-    for prefix in os.environ.get(
-        "LEGACY_API_PREFIXES", "lb4-multiplexer.altlayer.io"
-    ).split(",")
-    if prefix.strip() and prefix.strip() != API_PREFIX
-)
-API_PREFIXES = (API_PREFIX, *LEGACY_API_PREFIXES)
 DNS_LABEL_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 # the service is managed by the multiplexer
 ANNOTATION_MULTIPLEXER = f"{API_PREFIX}/multiplexer"
@@ -61,7 +53,6 @@ ANNOTATION_CHANNELS = f"{API_PREFIX}/channels"
 ANNOTATION_TOPOLOGY = f"{API_PREFIX}/topology"  # Human-readable topology summary
 ANNOTATION_SUMMARY = f"{API_PREFIX}/summary"  # One-line summary
 FINALIZER = f"{API_PREFIX}/finalizer"
-LEGACY_FINALIZERS = tuple(f"{prefix}/finalizer" for prefix in LEGACY_API_PREFIXES)
 
 
 
@@ -120,15 +111,8 @@ def annotation_key(name: str, prefix: str = API_PREFIX) -> str:
     return f"{prefix}/{name}"
 
 
-def accepted_annotation_keys(name: str):
-    return tuple(annotation_key(name, prefix) for prefix in API_PREFIXES)
-
-
 def get_annotation(annotations: dict, name: str, default=None):
-    for key in accepted_annotation_keys(name):
-        if key in annotations:
-            return annotations[key]
-    return default
+    return annotations.get(annotation_key(name), default)
 
 
 def has_multiplexer_annotation(body, **_):
@@ -157,8 +141,8 @@ def is_channel_service(spec, **_):
     Check if the service is a channel service
     """
     lb_class = spec.get("loadBalancerClass", "")
-    return spec.get("type") == "LoadBalancer" and any(
-        lb_class.startswith(prefix + "/") for prefix in API_PREFIXES
+    return spec.get("type") == "LoadBalancer" and lb_class.startswith(
+        API_PREFIX + "/"
     )
 
 
@@ -247,15 +231,11 @@ def get_mux_from_lb_class(cls: str):
     Raises:
         ValueError: If the format is invalid
     """
-    mux_ref = None
-    for api_prefix in API_PREFIXES:
-        prefix = api_prefix + "/"
-        if cls.startswith(prefix):
-            mux_ref = cls[len(prefix) :]
-            break
-    if mux_ref is None:
+    prefix = API_PREFIX + "/"
+    if not cls.startswith(prefix):
         expected = f"{API_PREFIX}/<name>[.<namespace>]"
         raise ValueError(f"Invalid LoadBalancerClass, expected format: {expected}")
+    mux_ref = cls[len(prefix) :]
 
     split_parts = mux_ref.split(".")
     if len(split_parts) == 1:
@@ -341,8 +321,6 @@ def channel_deletion(
     memo: kopf.Memo,
     **_,
 ):
-    remove_legacy_finalizers(body)
-
     # Clean up endpoints cache for the deleted channel
     memo.endpoints.pop((namespace, name), None)
 
@@ -397,8 +375,7 @@ def mux_endpoints(name, namespace, body, memo: kopf.Memo, **_):
 
 
 @kopf.on.delete("services", when=is_multiplexer_service)
-def mux_deletion(name, namespace, body, memo: kopf.Memo, **_):
-    remove_legacy_finalizers(body)
+def mux_deletion(name, namespace, memo: kopf.Memo, **_):
     mux_key = (namespace, name)
     memo.endpoints.pop(mux_key, None)
     memo.mux_queues.pop(mux_key, None)
@@ -608,22 +585,6 @@ def collect_channel_endpoints(channel, channel_service, memo):
 
     return endpoints
 
-
-def remove_legacy_finalizers(body):
-    finalizers = body.get("metadata", {}).get("finalizers", [])
-    stale_finalizers = [f for f in LEGACY_FINALIZERS if f in finalizers]
-    if not stale_finalizers:
-        return
-    retained = [f for f in finalizers if f not in stale_finalizers]
-    if not DRYRUN_MODE:
-        Service(body).patch({"metadata": {"finalizers": retained}})
-    else:
-        logging.debug(
-            "[DRYRUN] Would remove legacy finalizers from %s/%s: %s",
-            body["metadata"].get("namespace"),
-            body["metadata"].get("name"),
-            stale_finalizers,
-        )
 
 
 def update_channel_service_metadata(channel, channel_service, ports_anno, status_lb):
