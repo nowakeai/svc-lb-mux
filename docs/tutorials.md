@@ -254,6 +254,6 @@ Git should not own:
 - controller-owned annotations such as `svc-mux.nowake.ai/ports`,
   `svc-mux.nowake.ai/channels`, `svc-mux.nowake.ai/topology`, and
   `svc-mux.nowake.ai/summary`.
-- automatic allocation ConfigMap contents.
+- mux state ConfigMap contents, including automatic and static port claims.
 
 Use [GitOps compatibility](gitops.md) for Argo CD and Flux examples.

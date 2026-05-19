@@ -13,7 +13,8 @@ Main modules:
 | `src/main.py` | Controller entrypoint used by the container. |
 | `src/controller.py` | Kopf handlers, indexes, mux daemon loop, Kubernetes writes, event emission. |
 | `src/reconcile.py` | Pure reconciliation helpers for ports, channel validation, Endpoints metadata, GKE limits, and status patches. |
-| `src/port_allocations.py` | Stable automatic external port allocation backed by one ConfigMap per mux. |
+| `src/port_allocations.py` | ConfigMap naming, state encoding, mux ownership validation, and port range parsing. |
+| `src/mux_state.py` | Per-mux persisted state manager for static claims, explicit external ports, and auto allocation. |
 | `src/refs.py` | `loadBalancerClass` mux reference parsing and validation. |
 | `src/annotations.py` | Human-readable mux and channel annotation formatting. |
 | `src/events.py` | Kubernetes Event creation and debug UI event recording. |
@@ -106,15 +107,16 @@ Each iteration:
 1. Refreshes the mux Service from the API server.
 2. Reads mux `status.loadBalancer` for ingress propagation.
 3. Gets the current channel set from the Kopf index.
-4. Builds or loads the mux port allocator when a mux port range is configured.
-5. Processes channels in deterministic namespace/name order.
-6. Resolves desired mux ports for each channel.
-7. Rejects invalid or conflicting channel mappings.
-8. Aggregates channel Endpoints into mux Endpoints.
-9. Saves allocation ConfigMap changes.
-10. Patches mux annotations, mux `spec.ports`, mux Endpoints, and channel metadata/status only when they changed.
+4. Loads the per-mux state ConfigMap.
+5. Seeds existing port ownership from mux `spec.ports`, channel mapping annotations, and persisted claims; persisted claims take precedence.
+6. Processes channels in deterministic namespace/name order.
+7. Resolves desired mux ports for each channel.
+8. Rejects invalid or conflicting channel mappings.
+9. Aggregates channel Endpoints into mux Endpoints.
+10. Saves mux state ConfigMap changes.
+11. Patches mux annotations, mux `spec.ports`, mux Endpoints, and channel metadata/status only when they changed.
 
-The deterministic channel order is important because automatic port allocation should be stable and repeatable when multiple channels are reconciled at once.
+The deterministic channel order is now only a tie-breaker for brand-new conflicts. Persisted claims are the primary source of ownership across controller restarts and GitOps re-application.
 
 ## Port Mapping Modes
 
@@ -180,15 +182,15 @@ metadata:
 Implementation details:
 
 - `requested_port_range()` parses one or more ranges such as `20000-20099,21000-21010`.
-- `PortAllocator` reuses existing assignments when still valid.
+- `MuxState` reuses existing persisted auto assignments when still valid.
 - New assignments use the first available `(port, protocol)` in configured range order.
 - Static claims are reserved before auto allocation so auto ports do not collide with explicit ports.
-- Deleted or inactive auto assignments are pruned during reconciliation.
+- Deleted or inactive claims are pruned during reconciliation.
 - Exhaustion emits `InvalidPortMapping` with a no-available-port message.
 
-## Stable Allocation ConfigMap
+## Per-Mux State ConfigMap
 
-Automatic assignments are stored in one ConfigMap per mux. The default name is:
+Medium-term mux state is stored in one controller-owned ConfigMap per mux. It stores static port claims, explicit external port claims, and automatic assignments so ownership remains stable across controller restarts and GitOps drift. The default name is:
 
 ```text
 <mux-name>-port-allocations
@@ -202,18 +204,42 @@ metadata:
     svc-mux.nowake.ai/allocation-configmap: custom-name
 ```
 
-ConfigMap data uses `allocations.json`:
+ConfigMap data still uses `allocations.json` for compatibility. New controllers write a unified `portClaims` list and keep `allocations` as an auto-allocation compatibility view:
 
 ```json
 {
   "schemaVersion": 1,
   "mux": {"namespace": "svc-mux", "name": "mux"},
+  "portClaims": [
+    {
+      "namespace": "app",
+      "service": "api",
+      "portName": "http",
+      "protocol": "TCP",
+      "channelPort": 80,
+      "muxPort": 20000,
+      "port": 20000,
+      "source": "auto"
+    },
+    {
+      "namespace": "app",
+      "service": "p2p",
+      "portName": "p2p",
+      "protocol": "TCP",
+      "channelPort": 30303,
+      "muxPort": 30303,
+      "port": 30303,
+      "source": "static"
+    }
+  ],
   "allocations": [
     {
       "namespace": "app",
       "service": "api",
       "portName": "http",
       "protocol": "TCP",
+      "channelPort": 80,
+      "muxPort": 20000,
       "port": 20000,
       "source": "auto"
     }
@@ -223,11 +249,13 @@ ConfigMap data uses `allocations.json`:
 
 Implementation details:
 
-- The ConfigMap is labeled `app.kubernetes.io/name=svc-lb-mux` and `app.kubernetes.io/component=port-allocation`.
+- The ConfigMap is labeled `app.kubernetes.io/name=svc-lb-mux` and `app.kubernetes.io/component=mux-state`.
 - It is annotated with `<api-prefix>/mux: <namespace>/<name>`.
 - The store validates both metadata ownership and embedded state ownership.
 - Reusing one ConfigMap for multiple muxes is rejected with `PortAllocationStoreInvalid`.
-- Invalid JSON is rejected with `PortAllocationStoreInvalid`.
+- Invalid JSON is rejected with `PortAllocationStoreInvalid` and skips that mux reconciliation pass so ports are not reassigned from incomplete state.
+- Existing allocation-only state is migrated into `portClaims` on the next successful reconciliation.
+- Claims for deleted channel ports are pruned during reconciliation.
 
 This design avoids one global allocation object, reduces ConfigMap size pressure, and makes operations per-mux.
 
@@ -237,7 +265,11 @@ Within one mux, each `(external port, protocol)` pair can be used by only one ch
 
 Implementation details:
 
+- `MuxState.port_owners()` seeds owners from persisted per-mux `portClaims`.
+- `collect_existing_port_owners()` recovers owners from current mux `spec.ports` and channel `svc-mux.nowake.ai/ports` annotations when they are still present and unambiguous. This also helps migrate muxes whose existing state only contains older auto-allocation entries.
 - `find_mux_port_conflicts()` tracks owners during a reconciliation pass.
+- Existing persisted owners take precedence over recovered owners and newly added channels, even if the new channel sorts earlier by namespace/name.
+- If no persisted or recoverable owner exists, deterministic namespace/name processing provides the tie-breaker.
 - Conflicting channels emit `MuxPortConflict` and are skipped.
 - The same numeric port can be used for different protocols, for example `53/TCP` and `53/UDP`.
 - Duplicate port claims inside the same channel are also treated as conflicts.
@@ -372,7 +404,7 @@ Common warning/error events:
 | `InvalidPortMapping` | Channel external port annotation or port value is invalid. |
 | `InvalidPortRange` | Mux port range annotation is invalid. |
 | `InvalidMaxPorts` | Mux max port annotation is invalid. |
-| `PortAllocationStoreInvalid` | Allocation ConfigMap is malformed or owned by another mux. |
+| `PortAllocationStoreInvalid` | Mux state ConfigMap is malformed or owned by another mux. |
 | `MuxPortConflict` | Two mappings want the same `(external port, protocol)`. |
 | `MuxPortLimitExceeded` | A channel would exceed the mux port limit. |
 | `GkePortLimitApplied` | GKE mux was capped or defaulted to the 100-port limit. |
@@ -415,7 +447,7 @@ When `DRYRUN_MODE` is enabled, the controller computes desired state but does no
 Dry-run affects:
 
 - channel annotation and status patches;
-- allocation ConfigMap writes;
+- mux state ConfigMap writes;
 - mux annotation patches;
 - mux Service port patches;
 - mux Endpoints create/patch operations;
@@ -442,7 +474,7 @@ The controller intentionally writes some Kubernetes fields:
 | Mux Service | `spec.ports`, `<api-prefix>/channels`, `<api-prefix>/topology`, `<api-prefix>/summary` |
 | Mux Endpoints | entire generated Endpoints object and ownership metadata |
 | Channel Service | `<api-prefix>/ports`, `status.loadBalancer` |
-| Allocation ConfigMap | `allocations.json` and mux ownership metadata |
+| Mux state ConfigMap | `allocations.json`, `portClaims`, and mux ownership metadata |
 | Events | Kubernetes Events for changes and validation failures |
 
 GitOps should own mux identity, provider annotations, labels, Service type, load balancer class, static IP settings, and channel desired specs. GitOps should ignore mux `spec.ports` and generated controller annotations; see [gitops.md](gitops.md).
@@ -458,7 +490,7 @@ The chart grants the controller access to the resources it watches and writes:
 | `endpoints` | get, list, watch, create, update, patch, delete | Watch channel Endpoints and create/patch mux Endpoints. |
 | `endpoints/status` | get, update, patch | Present in chart RBAC for compatibility. |
 | `events` | create, patch | Record reconciliation changes and validation failures. |
-| `configmaps` | get, list, watch, create, update, patch | Store per-mux automatic port allocations. |
+| `configmaps` | get, list, watch, create, update, patch | Store per-mux state and port claims. |
 | `endpointslices` | get, list, watch, create, update, patch, delete | Pre-granted for planned EndpointSlice support; current controller still uses Endpoints. |
 | `customresourcedefinitions` | get, list, watch | Reserved chart permission for controller ecosystem compatibility. |
 

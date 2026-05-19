@@ -137,10 +137,12 @@ spec:
       targetPort: http
 ```
 
-The assignment is stored in one ConfigMap per mux, so the selected port remains
-stable across controller restarts and repeated GitOps applies.
+The assignment is stored in the per-mux state ConfigMap, so the selected port remains
+stable across controller restarts and repeated GitOps applies. Static and explicit
+port claims are stored there as well, which prevents newly added channels from
+stealing an existing port after a restart.
 
-Do not reuse one allocation ConfigMap for multiple muxes.
+Do not reuse one state ConfigMap for multiple muxes.
 
 ## Multiple Ports
 

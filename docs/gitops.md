@@ -13,7 +13,7 @@ The key rule is simple: GitOps may create mux and channel Services, but the cont
 | Additional mux Service | Name, namespace, provider annotations, labels, `type`, `loadBalancerClass`, static IP settings | `spec.ports`, mux runtime annotations |
 | Channel Service | Selector, app-facing `spec.ports`, `loadBalancerClass`, user annotations | `status.loadBalancer`, `<api-prefix>/ports` annotation |
 | Mux Endpoints | Do not manage from Git | Whole generated Endpoints object |
-| Per-mux port allocation ConfigMap | Do not manage from Git, unless repairing state manually | `allocations.json` and metadata |
+| Per-mux state ConfigMap | Do not manage from Git, unless repairing state manually | `allocations.json`, `portClaims`, and metadata |
 
 Controller-owned annotations use the configured API prefix. With the default prefix, those include:
 
@@ -79,7 +79,7 @@ metadata:
     svc-mux.nowake.ai/channels: '["app/api"]'
 ```
 
-When automatic port allocation is enabled, each mux gets its own controller-owned allocation ConfigMap. It stores stable `external-ports: "name:auto"` assignments in `allocations.json`, plus mux owner metadata. Do not overwrite it from Git unless you are intentionally repairing allocation state, and do not point multiple muxes at the same allocation ConfigMap.
+Each mux gets its own controller-owned state ConfigMap. It stores stable static claims, explicit external-port claims, and `external-ports: "name:auto"` assignments in `allocations.json`, plus mux owner metadata. Do not overwrite it from Git unless you are intentionally repairing mux state, and do not point multiple muxes at the same state ConfigMap.
 
 ## Annotation Drift
 
@@ -281,7 +281,7 @@ kubectl get configmap <mux-name>-port-allocations -n svc-mux -o yaml
 kubectl get events -n svc-mux --sort-by=.lastTimestamp
 ```
 
-If you see repeated GitOps/controller churn, check whether GitOps is applying mux `spec.ports`, generated mux Endpoints, allocation ConfigMaps, or controller-owned annotations.
+If you see repeated GitOps/controller churn, check whether GitOps is applying mux `spec.ports`, generated mux Endpoints, state ConfigMaps, or controller-owned annotations.
 
 ## References
 

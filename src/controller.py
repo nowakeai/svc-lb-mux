@@ -28,15 +28,15 @@ from config import (
 from models import MuxPort
 from port_allocations import (
     ConfigMapAllocationStore,
-    PortAllocator,
     allocation_configmap_name,
     requested_port_range,
 )
+from mux_state import MuxState
 from reconcile import (
     build_generated_endpoints_metadata,
     build_mux_ports,
-    collect_auto_allocation_keys,
     collect_channel_endpoints,
+    collect_existing_port_owners,
     collect_static_port_claims,
     count_ready_channel_pods,
     get_current_endpoints_set,
@@ -357,7 +357,7 @@ def mux_deletion(name, namespace, memo: kopf.Memo, **_):
     webserver.record_event("Normal", f"{namespace}/{name}", "Mux deleted")
 
 
-def build_port_allocator(mux, mux_key, channels, event_body):
+def build_mux_state(mux, mux_key, channels, event_body):
     try:
         ranges = requested_port_range(mux)
     except ValueError as error:
@@ -366,10 +366,7 @@ def build_port_allocator(mux, mux_key, channels, event_body):
             reason="InvalidPortRange",
             message=str(error),
         )
-        return None, None
-
-    if not ranges:
-        return None, None
+        ranges = []
 
     store = ConfigMapAllocationStore(
         namespace=mux.namespace,
@@ -379,7 +376,6 @@ def build_port_allocator(mux, mux_key, channels, event_body):
     try:
         state = store.load()
         reserved_ports = collect_static_port_claims(channels)
-        active_keys = collect_auto_allocation_keys(channels)
     except ValueError as error:
         events.error(
             event_body,
@@ -389,12 +385,12 @@ def build_port_allocator(mux, mux_key, channels, event_body):
         return None, None
 
     return (
-        PortAllocator(
+        MuxState(
             mux_key,
-            ranges,
-            state,
+            ranges=ranges,
+            state=state,
+            channels=channels,
             reserved_ports=reserved_ports,
-            active_keys=active_keys,
         ),
         store,
     )
@@ -448,7 +444,6 @@ def mux_daemon(
         channels = mux_channels.get((namespace, name), set())
         endpoints = []
         ports = set()
-        port_owners = {}
 
         try:
             max_ports_warning = gke_max_ports_warning(mux)
@@ -473,9 +468,11 @@ def mux_daemon(
             tuple(channels),
             key=lambda item: (item["metadata"]["namespace"], item["metadata"]["name"]),
         )
-        allocator, allocation_store = build_port_allocator(
-            mux, mux_key, sorted_channels, body
-        )
+        mux_state, state_store = build_mux_state(mux, mux_key, sorted_channels, body)
+        if mux_state is None:
+            continue
+        port_owners = collect_existing_port_owners(sorted_channels, old_ports)
+        port_owners.update(mux_state.port_owners())
         for ch in sorted_channels:
             if would_exceed_mux_port_limit(ports, ch, max_ports):
                 events.error(
@@ -490,7 +487,7 @@ def mux_daemon(
 
             try:
                 ch_ports, ch_ports_anno, channel_service = process_channel_ports(
-                    ch, memo, allocator=allocator
+                    ch, memo, allocator=mux_state
                 )
             except ValueError as error:
                 events.error(
@@ -510,6 +507,7 @@ def mux_daemon(
                 continue
 
             ports.update(ch_ports)
+            mux_state.record_channel_claims(ch, ch_ports_anno)
             update_channel_service_metadata(
                 ch, channel_service, ch_ports_anno, status_lb
             )
@@ -517,11 +515,11 @@ def mux_daemon(
             ch_endpoints = collect_channel_endpoints(ch, channel_service, memo)
             endpoints.extend(ch_endpoints)
 
-        if allocator and allocation_store:
+        if state_store:
             try:
-                allocation_state = allocator.to_state()
-                if allocator.changed:
-                    allocation_store.save(allocation_state)
+                state = mux_state.to_state()
+                if mux_state.changed or not state_store.exists:
+                    state_store.save(state)
             except ValueError as error:
                 events.error(
                     body,

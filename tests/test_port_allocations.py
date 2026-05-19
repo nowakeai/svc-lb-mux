@@ -287,7 +287,7 @@ class PortAllocationTest(unittest.TestCase):
             configmap_factory=MemoryConfigMap,
         )
 
-        with self.assertRaisesRegex(ValueError, "one allocation ConfigMap per mux"):
+        with self.assertRaisesRegex(ValueError, "one state ConfigMap per mux"):
             store.load()
 
     def test_allocation_configmap_name_defaults_per_mux(self):

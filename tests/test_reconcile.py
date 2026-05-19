@@ -11,6 +11,7 @@ from reconcile import (
     build_mux_ports,
     channel_refs,
     collect_auto_allocation_keys,
+    collect_existing_port_owners,
     collect_static_port_claims,
     count_ready_channel_pods,
     effective_mux_max_ports,
@@ -308,6 +309,63 @@ class ReconcileHelperTest(unittest.TestCase):
 
         self.assertEqual(collect_static_port_claims(channels), {(80, "TCP")})
         self.assertEqual(len(collect_auto_allocation_keys(channels)), 1)
+
+    def test_existing_mux_port_owner_is_preserved_across_reconcile(self):
+        existing = channel_service(name="z-existing")
+        newcomer = channel_service(name="a-new")
+        existing_mux_name = port_hash("app", "z-existing", "http")
+        existing_ports = {MuxPort(existing_mux_name, 80, "TCP")}
+        owners = collect_existing_port_owners([newcomer, existing], existing_ports)
+
+        self.assertEqual(owners, {(80, "TCP"): f"app/z-existing:{existing_mux_name}"})
+        newcomer_ports = {MuxPort(port_hash("app", "a-new", "http"), 80, "TCP")}
+        conflicts = find_mux_port_conflicts(owners, newcomer, newcomer_ports)
+
+        self.assertEqual(len(conflicts), 1)
+        self.assertIn("app/z-existing", conflicts[0])
+
+    def test_deleted_existing_mux_port_owner_is_not_preserved(self):
+        existing_mux_name = port_hash("app", "deleted", "http")
+        existing_ports = {MuxPort(existing_mux_name, 80, "TCP")}
+
+        self.assertEqual(collect_existing_port_owners([], existing_ports), {})
+
+    def test_channel_port_annotation_preserves_owner_when_mux_has_placeholder(self):
+        existing = channel_service(
+            name="z-existing",
+            annotations={"svc-mux.nowake.ai/ports": "http:80->80"},
+        )
+        newcomer = channel_service(name="a-new")
+        owners = collect_existing_port_owners(
+            [newcomer, existing],
+            {MuxPort("placeholder", 101, "TCP")},
+        )
+        existing_mux_name = port_hash("app", "z-existing", "http")
+
+        self.assertEqual(owners, {(80, "TCP"): f"app/z-existing:{existing_mux_name}"})
+        conflicts = find_mux_port_conflicts(
+            owners,
+            newcomer,
+            {MuxPort(port_hash("app", "a-new", "http"), 80, "TCP")},
+        )
+
+        self.assertEqual(len(conflicts), 1)
+        self.assertIn("app/z-existing", conflicts[0])
+
+    def test_ambiguous_channel_port_annotations_do_not_seed_owner(self):
+        first = channel_service(
+            name="first",
+            annotations={"svc-mux.nowake.ai/ports": "http:80->80"},
+        )
+        second = channel_service(
+            name="second",
+            annotations={"svc-mux.nowake.ai/ports": "http:80->80"},
+        )
+
+        self.assertEqual(
+            collect_existing_port_owners([first, second], {MuxPort("placeholder", 101, "TCP")}),
+            {},
+        )
 
     def test_find_mux_port_conflicts_detects_duplicate_port_protocol(self):
         first = channel_service(name="api")

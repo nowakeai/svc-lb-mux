@@ -1,4 +1,4 @@
-"""Stable mux external port allocation backed by ConfigMap data."""
+"""ConfigMap naming, encoding, and legacy auto-allocation helpers."""
 
 import json
 from dataclasses import dataclass
@@ -223,7 +223,7 @@ class ConfigMapAllocationStore:
                     "namespace": self.namespace,
                     "labels": {
                         "app.kubernetes.io/name": "svc-lb-mux",
-                        "app.kubernetes.io/component": "port-allocation",
+                        "app.kubernetes.io/component": "mux-state",
                     },
                     "annotations": {
                         annotation_key("mux"): self.mux_ref,
@@ -247,8 +247,8 @@ class ConfigMapAllocationStore:
         )
         if owner and owner != self.mux_ref:
             raise ValueError(
-                f"Port allocation ConfigMap {self.namespace}/{self.name} is owned by mux {owner}; "
-                f"expected {self.mux_ref}. Use one allocation ConfigMap per mux."
+                f"Mux state ConfigMap {self.namespace}/{self.name} is owned by mux {owner}; "
+                f"expected {self.mux_ref}. Use one state ConfigMap per mux."
             )
 
     def _validate_state_owner(self, state):
@@ -259,8 +259,8 @@ class ConfigMapAllocationStore:
         name = mux.get("name")
         if (namespace, name) != self.mux_key:
             raise ValueError(
-                f"Port allocation ConfigMap {self.namespace}/{self.name} contains state for mux "
-                f"{namespace}/{name}; expected {self.mux_ref}. Use one allocation ConfigMap per mux."
+                f"Mux state ConfigMap {self.namespace}/{self.name} contains state for mux "
+                f"{namespace}/{name}; expected {self.mux_ref}. Use one state ConfigMap per mux."
             )
 
 def encode_state(state):
@@ -274,7 +274,7 @@ def decode_state(data):
     try:
         return json.loads(raw)
     except json.JSONDecodeError as error:
-        raise ValueError("Invalid port allocation ConfigMap JSON") from error
+        raise ValueError("Invalid mux state ConfigMap JSON") from error
 
 
 def _allocations_by_key(state):
