@@ -73,7 +73,7 @@ Builds from this repository publish images and Helm charts to GHCR. Install the 
 
 ```console
 helm install svc-mux oci://ghcr.io/nowakeai/charts/svc-lb-mux \
-  --version 0.1.0 \
+  --version 0.1.1 \
   --namespace svc-mux \
   --create-namespace
 ```
