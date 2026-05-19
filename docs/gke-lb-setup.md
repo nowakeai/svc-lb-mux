@@ -49,7 +49,16 @@ defaultLoadBalancer:
   allocationConfigMapName: ""
 ```
 
-`cloud.google.com/l4-rbs: "enabled"` asks GKE to create a backend service-based external passthrough Network Load Balancer.
+`cloud.google.com/l4-rbs: "enabled"` asks GKE to create a backend service-based external passthrough Network Load Balancer. Keep this default for GKE unless you have a provider-specific reason to use the older target pool path.
+
+Forwarding rule port behavior is managed by GKE from the mux Service port list:
+
+- In backend service mode, GKE can publish a small number of active mux ports as a discrete `ports` list.
+- When the active mux ports exceed that discrete-port shape, GKE can switch the forwarding rule to a contiguous `portRange` spanning the smallest and largest mux ports.
+- In live GKE testing, four ports `10301`, `10302`, `20301`, and `20302` rendered as discrete ports. Adding two more non-contiguous ports changed the forwarding rule to `portRange: 10301-20302`.
+- Target pool-based external load balancers also use a contiguous forwarding rule port range.
+
+Both modes can work for mux traffic, but wide gaps between channel ports can reserve a broad forwarding rule range, and GKE may not immediately shrink that range after channels are removed. Plan channel external ports in compact ranges when possible.
 
 Install with defaults:
 

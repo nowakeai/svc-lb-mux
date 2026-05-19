@@ -106,7 +106,7 @@ defaultLoadBalancer:
   allocationConfigMapName: ""
 ```
 
-For production GKE installs, see [docs/gke-lb-setup.md](docs/gke-lb-setup.md), including static IP binding, the GKE 100-port mux limit, generated Google Cloud resources, and validation commands. For AWS, see [docs/aws-nlb-setup.md](docs/aws-nlb-setup.md).
+For production GKE installs, see [docs/gke-lb-setup.md](docs/gke-lb-setup.md), including static IP binding, the GKE 100-port mux limit, GKE forwarding rule port behavior, generated Google Cloud resources, and validation commands. For AWS, see [docs/aws-nlb-setup.md](docs/aws-nlb-setup.md).
 
 ## Create A Channel Service
 
