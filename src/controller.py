@@ -388,7 +388,7 @@ def build_mux_state(mux, mux_key, channels, event_body, reserved_port_owners=Non
         return (
             MuxState(
                 mux_key,
-                ranges=ranges,
+                ranges=[],
                 state={},
                 channels=channels,
                 reserved_ports=reserved_ports,
