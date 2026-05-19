@@ -9,12 +9,15 @@ from config import get_annotation
 
 logger = logging.getLogger(__name__)
 
+MAX_DEBUG_EVENTS = 100
+MAX_EVENT_MESSAGE_LENGTH = 2000
+
 
 class DebugStateStore:
     def __init__(self):
         self._lock = threading.Lock()
         self._state = {
-            "events": deque(maxlen=100),
+            "events": deque(maxlen=MAX_DEBUG_EVENTS),
             "mux_services": {},
             "channel_services": {},
             "endpoints": {},
@@ -22,9 +25,27 @@ class DebugStateStore:
 
     def record_event(self, event_type: str, resource: str, message: str):
         with self._lock:
+            message = truncate_event_message(message)
+            now = datetime.now().isoformat()
+            for existing in list(self._state["events"]):
+                if (
+                    existing["type"] == event_type
+                    and existing["resource"] == resource
+                    and existing["message"] == message
+                ):
+                    self._state["events"].remove(existing)
+                    existing["timestamp"] = now
+                    existing["last_timestamp"] = now
+                    existing["count"] = existing.get("count", 1) + 1
+                    self._state["events"].appendleft(existing)
+                    return
+
             self._state["events"].appendleft(
                 {
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": now,
+                    "first_timestamp": now,
+                    "last_timestamp": now,
+                    "count": 1,
                     "type": event_type,
                     "resource": resource,
                     "message": message,
@@ -332,6 +353,13 @@ state_store = DebugStateStore()
 
 def record_event(event_type: str, resource: str, message: str):
     state_store.record_event(event_type, resource, message)
+
+
+def truncate_event_message(message: str) -> str:
+    if len(message) <= MAX_EVENT_MESSAGE_LENGTH:
+        return message
+    omitted = len(message) - MAX_EVENT_MESSAGE_LENGTH
+    return f"{message[:MAX_EVENT_MESSAGE_LENGTH]}... [truncated {omitted} chars]"
 
 
 def delete_mux_state(mux_key):

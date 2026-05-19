@@ -50,6 +50,19 @@ from reconcile import (
 )
 from refs import get_mux_from_lb_class
 
+VOLATILE_METADATA_ANNOTATIONS = {
+    "kopf.zalando.org/last-handled-configuration",
+    "kubectl.kubernetes.io/last-applied-configuration",
+}
+
+
+def comparable_annotations(annotations):
+    return {
+        key: value
+        for key, value in dict(annotations or {}).items()
+        if key not in VOLATILE_METADATA_ANNOTATIONS
+    }
+
 current_format = (
     logging.root.handlers[0].formatter._fmt if logging.root.handlers else None
 )
@@ -533,7 +546,7 @@ def mux_daemon(
         )
         old_metadata = ep._raw.get("metadata", {})
         old_labels = dict(old_metadata.get("labels", {}))
-        old_annotations = dict(old_metadata.get("annotations", {}))
+        old_annotations = comparable_annotations(old_metadata.get("annotations", {}))
 
         # Collect old endpoints for comparison before replacing desired metadata/subsets.
         old_endpoints, old_not_ready_endpoints = get_old_endpoints_set(ep._raw)
@@ -630,7 +643,7 @@ def mux_daemon(
 
             metadata_changed = (
                 old_labels != endpoint_labels
-                or old_annotations != endpoint_annotations
+                or old_annotations != comparable_annotations(endpoint_annotations)
             )
 
             # Compare metadata and both ready and not-ready endpoints to detect all changes.

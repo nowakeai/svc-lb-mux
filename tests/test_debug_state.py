@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from debug_state import DebugStateStore, parse_mux_port_annotation
+from debug_state import DebugStateStore, MAX_EVENT_MESSAGE_LENGTH, parse_mux_port_annotation
 
 
 class DebugStateTest(unittest.TestCase):
@@ -79,6 +79,27 @@ class DebugStateTest(unittest.TestCase):
         )
         self.assertEqual(snapshot["endpoints"]["app/api"]["pods"], ["app/api-0"])
         self.assertFalse(store.topology()["svc-mux/mux"]["mux_missing"])
+
+    def test_record_event_coalesces_duplicate_events(self):
+        store = DebugStateStore()
+
+        store.record_event("Normal", "svc-mux/mux", "Mux endpoints updated")
+        store.record_event("Normal", "svc-mux/mux", "Mux endpoints updated")
+
+        events = store.snapshot()["events"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["count"], 2)
+        self.assertIn("first_timestamp", events[0])
+        self.assertIn("last_timestamp", events[0])
+
+    def test_record_event_truncates_long_messages(self):
+        store = DebugStateStore()
+
+        store.record_event("Normal", "svc-mux/mux", "x" * (MAX_EVENT_MESSAGE_LENGTH + 10))
+
+        event = store.snapshot()["events"][0]
+        self.assertLess(len(event["message"]), MAX_EVENT_MESSAGE_LENGTH + 80)
+        self.assertIn("truncated 10 chars", event["message"])
 
     def test_delete_mux_state_removes_mux_channels_and_endpoints(self):
         store = DebugStateStore()
