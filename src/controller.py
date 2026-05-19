@@ -357,7 +357,7 @@ def mux_deletion(name, namespace, memo: kopf.Memo, **_):
     webserver.record_event("Normal", f"{namespace}/{name}", "Mux deleted")
 
 
-def build_mux_state(mux, mux_key, channels, event_body):
+def build_mux_state(mux, mux_key, channels, event_body, reserved_port_owners=None):
     try:
         ranges = requested_port_range(mux)
     except ValueError as error:
@@ -391,6 +391,7 @@ def build_mux_state(mux, mux_key, channels, event_body):
             state=state,
             channels=channels,
             reserved_ports=reserved_ports,
+            reserved_port_owners=reserved_port_owners,
         ),
         store,
     )
@@ -468,10 +469,17 @@ def mux_daemon(
             tuple(channels),
             key=lambda item: (item["metadata"]["namespace"], item["metadata"]["name"]),
         )
-        mux_state, state_store = build_mux_state(mux, mux_key, sorted_channels, body)
+        recovered_port_owners = collect_existing_port_owners(sorted_channels, old_ports)
+        mux_state, state_store = build_mux_state(
+            mux,
+            mux_key,
+            sorted_channels,
+            body,
+            reserved_port_owners=recovered_port_owners,
+        )
         if mux_state is None:
             continue
-        port_owners = collect_existing_port_owners(sorted_channels, old_ports)
+        port_owners = dict(recovered_port_owners)
         port_owners.update(mux_state.port_owners())
         for ch in sorted_channels:
             if would_exceed_mux_port_limit(ports, ch, max_ports):

@@ -186,6 +186,53 @@ class MuxStateTest(unittest.TestCase):
         self.assertTrue(state.changed)
         self.assertEqual(state.to_state()["portClaims"][0]["muxPort"], 30000)
 
+    def test_auto_allocation_avoids_recovered_owner_claims(self):
+        channel = channel_service(
+            name="a-new",
+            port=80,
+            annotations={"svc-mux.nowake.ai/external-ports": "http:auto"},
+        )
+        existing_owner = f"app/z-existing:{port_hash('app', 'z-existing', 'http')}"
+        state = MuxState(
+            ("svc-mux", "mux"),
+            ranges=[(30000, 30001)],
+            channels=[channel],
+            reserved_port_owners={(30000, "TCP"): existing_owner},
+        )
+
+        self.assertEqual(state.allocate(channel, channel["spec"]["ports"][0]), 30001)
+
+    def test_auto_allocation_reuses_same_recovered_owner_claim(self):
+        channel = channel_service(
+            name="api",
+            port=80,
+            annotations={"svc-mux.nowake.ai/external-ports": "http:auto"},
+        )
+        owner = f"app/api:{port_hash('app', 'api', 'http')}"
+        state = MuxState(
+            ("svc-mux", "mux"),
+            ranges=[(30000, 30000)],
+            state={
+                "portClaims": [
+                    {
+                        "namespace": "app",
+                        "service": "api",
+                        "portName": "http",
+                        "protocol": "TCP",
+                        "channelPort": 80,
+                        "muxPort": 30000,
+                        "port": 30000,
+                        "source": "auto",
+                    }
+                ]
+            },
+            channels=[channel],
+            reserved_port_owners={(30000, "TCP"): owner},
+        )
+
+        self.assertEqual(state.allocate(channel, channel["spec"]["ports"][0]), 30000)
+        self.assertFalse(state.changed)
+
     def test_auto_allocation_reports_exhaustion(self):
         channel = channel_service(
             name="api",

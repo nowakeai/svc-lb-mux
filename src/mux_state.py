@@ -14,11 +14,20 @@ MODE_STATIC = "static"
 class MuxState:
     """Manage persisted port claims for one mux reconciliation pass."""
 
-    def __init__(self, mux_key, ranges=None, state=None, channels=None, reserved_ports=None):
+    def __init__(
+        self,
+        mux_key,
+        ranges=None,
+        state=None,
+        channels=None,
+        reserved_ports=None,
+        reserved_port_owners=None,
+    ):
         self.mux_key = mux_key
         self.ranges = ranges or []
         self.active_keys = _active_claim_keys(channels or [])
         self.reserved_ports = set(reserved_ports or set())
+        self.reserved_port_owners = dict(reserved_port_owners or {})
         self.claims = _claims_by_key(state or {})
         self.changed = _state_needs_claim_write(state or {})
         self._prune_inactive()
@@ -41,17 +50,18 @@ class MuxState:
             )
 
         ref = PortAllocationRef.from_channel_port(channel, port)
+        owner = _ref_owner(ref)
         existing = self.claims.get(ref.key)
         if existing:
             existing_port = _claim_mux_port(existing)
             if (
                 existing_port is not None
                 and contains_port(self.ranges, existing_port)
-                and not self._is_claimed(existing_port, ref.protocol, ref.key)
+                and not self._is_claimed(existing_port, ref.protocol, ref.key, owner)
             ):
                 return existing_port
 
-        allocated = self._next_available_port(ref.protocol)
+        allocated = self._next_available_port(ref.protocol, owner)
         self._set_claim(ref, channel_port=port.get("port"), mux_port=allocated, mode=MODE_AUTO)
         return allocated
 
@@ -105,8 +115,8 @@ class MuxState:
         if set(self.claims) != before:
             self.changed = True
 
-    def _next_available_port(self, protocol):
-        used = self._used_port_protocols()
+    def _next_available_port(self, protocol, owner):
+        used = self._used_port_protocols(owner)
         for start, end in self.ranges:
             for port in range(start, end + 1):
                 if (port, protocol) not in used:
@@ -119,16 +129,23 @@ class MuxState:
             f"No available {protocol} port in mux port range {ranges}"
         )
 
-    def _is_claimed(self, port, protocol, current_key):
+    def _is_claimed(self, port, protocol, current_key, owner):
+        port_key = (port, protocol)
         for key, claim in self.claims.items():
             if key == current_key:
                 continue
             if _claim_mux_port(claim) == port and claim.get("protocol", "TCP") == protocol:
                 return True
-        return (port, protocol) in self.reserved_ports
+        if port_key in self.reserved_ports:
+            return True
+        reserved_owner = self.reserved_port_owners.get(port_key)
+        return reserved_owner is not None and reserved_owner != owner
 
-    def _used_port_protocols(self):
+    def _used_port_protocols(self, owner):
         used = set(self.reserved_ports)
+        for port_key, reserved_owner in self.reserved_port_owners.items():
+            if reserved_owner != owner:
+                used.add(port_key)
         for claim in self.claims.values():
             port = _claim_mux_port(claim)
             if port is not None:
@@ -188,6 +205,15 @@ def _claim_mux_port(claim):
 def _claim_owner(claim):
     mux_name = _claim_mux_name(claim)
     return f"{claim['namespace']}/{claim['service']}:{mux_name}"
+
+
+def _ref_owner(ref):
+    claim = {
+        "namespace": ref.namespace,
+        "service": ref.service,
+        "portName": ref.port_name,
+    }
+    return _claim_owner(claim)
 
 
 def _claim_mux_name(claim):
