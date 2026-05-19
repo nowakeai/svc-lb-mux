@@ -182,7 +182,7 @@ metadata:
     svc-mux.nowake.ai/external-ports: "http:auto"
 ```
 
-Automatic assignments are stored in one ConfigMap per mux. Do not reuse one allocation ConfigMap across multiple muxes.
+Automatic assignments and static port claims are stored in one state ConfigMap per mux. Do not reuse one state ConfigMap across multiple muxes.
 
 ## GKE Port And Firewall Model
 

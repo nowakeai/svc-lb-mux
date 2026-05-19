@@ -93,6 +93,13 @@ Symptoms:
 - `MuxPortConflict` event.
 - One channel does not appear in the mux port list.
 
+Behavior:
+
+- If a port claim exists in the per-mux state ConfigMap, that owner is preserved across controller restarts.
+- If the state ConfigMap is missing and GitOps temporarily reverts mux `spec.ports` to a placeholder, channel `svc-mux.nowake.ai/ports` annotations can preserve ownership as a fallback.
+- A newly added conflicting channel is skipped, even if its namespace/name sorts earlier.
+- If neither channel has a live mux port yet, namespace/name order is the deterministic tie-breaker.
+
 Fix:
 
 - Choose a different `spec.ports[].port`.
@@ -106,10 +113,11 @@ Symptoms:
 - `InvalidPortMapping` event mentioning automatic allocation.
 - No available port in the configured range.
 
-Check the mux range:
+Check the mux range and state ConfigMap:
 
 ```console
 kubectl get svc <mux> -n <mux-namespace> -o yaml
+kubectl get configmap <mux-name>-port-allocations -n <mux-namespace> -o yaml
 ```
 
 With the default API prefix, the relevant annotations are:
@@ -124,7 +132,7 @@ Fix:
 - Configure a `portRange` on the mux.
 - Increase the range.
 - Delete unused channels so stale automatic assignments can be pruned.
-- Use one allocation ConfigMap per mux.
+- Use one state ConfigMap per mux.
 
 ## Mux Has Ports But Traffic Fails
 

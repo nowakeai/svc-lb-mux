@@ -138,7 +138,7 @@ metadata:
     svc-mux.nowake.ai/external-ports: "p2p:auto"
 ```
 
-Automatic assignments are stored in one ConfigMap per mux so the mapping remains stable across controller restarts and GitOps re-application without coupling unrelated muxes to the same object size or update stream. Do not reuse the same allocation ConfigMap name for multiple muxes. Conflicts are reported with a `MuxPortConflict` event.
+Automatic assignments and static port claims are stored in one state ConfigMap per mux so mappings remain stable across controller restarts and GitOps re-application without coupling unrelated muxes to the same object size or update stream. Do not reuse the same state ConfigMap name for multiple muxes. Conflicts are reported with a `MuxPortConflict` event.
 
 ## Troubleshooting
 

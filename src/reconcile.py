@@ -5,7 +5,7 @@ from hashlib import sha256
 
 from kr8s.objects import Service
 
-from annotations import format_channel_port_annotation
+from annotations import format_channel_port_annotation, parse_port_mappings
 from config import (
     ANNOTATION_CHANNELS,
     ANNOTATION_MANAGED,
@@ -243,6 +243,80 @@ def collect_static_port_claims(channels):
             mux_port = resolve_channel_external_port(port, explicit_ports)
             claims.add((mux_port, port.get("protocol", "TCP")))
     return claims
+
+
+def collect_existing_port_owners(channels, existing_ports):
+    """Return owners derived from already-applied mux and channel state.
+
+    The mux Service is the strongest source because it describes live provider
+    ports. Channel mapping annotations are a fallback for cases where another
+    reconciler temporarily wrote the mux Service back to a placeholder port.
+    """
+    owners_by_mux_name = _channel_owners_by_mux_name(channels)
+    port_owners = _owners_from_existing_mux_ports(owners_by_mux_name, existing_ports)
+
+    annotation_owners = _owners_from_channel_port_annotations(channels)
+    for key, candidates in annotation_owners.items():
+        if key in port_owners or len(candidates) != 1:
+            continue
+        port_owners[key] = next(iter(candidates))
+
+    return port_owners
+
+
+def _channel_owners_by_mux_name(channels):
+    owners_by_mux_name = {}
+    for channel in channels:
+        channel_ns = channel["metadata"]["namespace"]
+        channel_name = channel["metadata"]["name"]
+        for port in channel.get("spec", {}).get("ports", []):
+            port_name = port.get("name")
+            if not port_name:
+                continue
+            mux_name = port_hash(channel_ns, channel_name, port_name)
+            owners_by_mux_name.setdefault(mux_name, set()).add(
+                f"{channel_ns}/{channel_name}:{mux_name}"
+            )
+    return owners_by_mux_name
+
+
+def _owners_from_existing_mux_ports(owners_by_mux_name, existing_ports):
+    port_owners = {}
+    for existing_port in existing_ports:
+        candidates = owners_by_mux_name.get(existing_port.name, set())
+        if len(candidates) != 1:
+            continue
+        key = (existing_port.port, existing_port.protocol)
+        port_owners.setdefault(key, next(iter(candidates)))
+    return port_owners
+
+
+def _owners_from_channel_port_annotations(channels):
+    annotation_owners = {}
+    for channel in channels:
+        annotations = channel.get("metadata", {}).get("annotations", {})
+        mux_port_mappings = parse_port_mappings(annotations.get(ANNOTATION_PORTS, ""))
+        if not mux_port_mappings:
+            continue
+
+        channel_ns = channel["metadata"]["namespace"]
+        channel_name = channel["metadata"]["name"]
+        for port in channel.get("spec", {}).get("ports", []):
+            port_name = port.get("name")
+            if not port_name or port_name not in mux_port_mappings:
+                continue
+            try:
+                mux_port = validate_port_number(
+                    mux_port_mappings[port_name], ANNOTATION_PORTS
+                )
+            except ValueError:
+                continue
+            mux_name = port_hash(channel_ns, channel_name, port_name)
+            key = (mux_port, port.get("protocol", "TCP"))
+            annotation_owners.setdefault(key, set()).add(
+                f"{channel_ns}/{channel_name}:{mux_name}"
+            )
+    return annotation_owners
 
 
 def find_mux_port_conflicts(port_owners, channel, mux_ports):

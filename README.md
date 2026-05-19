@@ -19,7 +19,7 @@ Kubernetes makes external L4 exposure simple with `type: LoadBalancer`, but the 
 - **Less quota pressure**: stretch limited forwarding rule, IP, and load balancer quotas.
 - **Kubernetes-native operations**: use Services, annotations, Helm, events, Endpoints, and GitOps ignore rules.
 - **No cloud IAM dependency for the normal path**: on GKE, forwarding rules and firewall rules remain GKE-managed.
-- **Stable port allocation**: automatic channel ports are persisted per mux in a ConfigMap.
+- **Stable port ownership**: channel port claims and automatic assignments are persisted per mux in a controller-owned ConfigMap.
 
 ## Concepts
 
@@ -185,7 +185,7 @@ Important follow-up work before treating `svc-lb-mux` as a broadly complete prod
 - **Debug Web UI**: rebuild the WIP UI into a modular, production-oriented operator console with clearer topology views, safer authentication and authorization, audit-friendly actions, and extensible diagnostics.
 - **Debug plugins**: move protocol-specific diagnostics into opt-in plugins, starting with workloads such as `devp2p`, so the core controller stays provider- and protocol-neutral.
 - **EndpointSlice support**: add EndpointSlice aggregation alongside the current Endpoints path, with readable generated resources and better scaling characteristics for large channel sets.
-- **GitOps hardening**: continue reducing controller/GitOps drift risk, especially around generated mux ports, allocation state, status fields, and provider-managed annotations.
+- **GitOps hardening**: continue reducing controller/GitOps drift risk, especially around generated mux ports, mux state, status fields, and provider-managed annotations.
 - **Provider validation**: expand repeatable pressure tests and compatibility reports for GKE, EKS, and additional Kubernetes providers.
 
 ## Documentation
