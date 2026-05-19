@@ -1,10 +1,10 @@
 # Service LoadBalancer Multiplexer Debug Tool
 
-`mux-debug` is an experimental helper CLI for inspecting mux Services, channel Services, endpoints, and P2P connectivity in Kubernetes clusters. It is not part of the controller runtime and is maintained as a best-effort operator aid.
+`mux-debug` is an experimental helper CLI for inspecting mux Services, channel Services, and endpoints in Kubernetes clusters. Its generic graph and TCP checks are useful for any svc-lb-mux deployment. Its deeper P2P diagnostics are focused on OP Stack node traffic and are maintained as a best-effort operator aid, not as part of the controller runtime.
 
 ## Status
 
-This tool is WIP. The generic mux inspection commands should remain useful, but P2P-specific diagnostics are optional and intentionally separate from the controller product surface. Treat provider- or protocol-specific checks as experimental.
+This tool is WIP. The generic mux inspection commands should remain useful, but P2P-specific diagnostics are intentionally OP Stack-oriented and optional. Treat provider- or protocol-specific checks as experimental.
 
 ## Install Dependencies
 
@@ -29,6 +29,14 @@ Override the API prefix for a non-default deployment:
 ```console
 API_PREFIX=example.internal ./tools/mux-debug list
 ```
+
+## OP Stack P2P Diagnostics
+
+The P2P commands are primarily for OP Stack bootnode and archive-node checks:
+
+- `op-node` pods are detected as libp2p peers and can be checked with TCP plus libp2p handshake validation.
+- `geth`, `reth`, and `erigon` pods are detected as devp2p peers. The tool attempts to read `admin_nodeInfo` or an enode and can run RLPx validation when the optional helper is available.
+- Non-OP Stack workloads should treat P2P output as best-effort only. The generic mux graph, endpoint, and TCP checks are the supported cross-workload diagnostics.
 
 ## Commands
 

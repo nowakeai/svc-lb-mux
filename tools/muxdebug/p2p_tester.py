@@ -352,9 +352,9 @@ class P2PTester:
     def detect_p2p_protocol(self, service_name: str) -> P2PProtocol:
         """Detect P2P protocol from service name"""
         name_lower = service_name.lower()
-        if "geth" in name_lower:
+        if any(token in name_lower for token in ("geth", "reth", "erigon")):
             return P2PProtocol.DEVP2P
-        elif "node" in name_lower and "geth" not in name_lower:
+        elif "node" in name_lower:
             return P2PProtocol.LIBP2P
         return P2PProtocol.UNKNOWN
 
@@ -370,6 +370,70 @@ class P2PTester:
             logger.warning(f"Unknown P2P protocol for pod: {pod_name}")
             return None
 
+    def _exec_json_rpc(
+        self, pod_name: str, namespace: str, port: int, method: str
+    ) -> Optional[dict]:
+        """Execute a JSON-RPC method from inside a pod.
+
+        OP Stack execution client images vary: some include curl, some include
+        wget, and some minimal op-reth images include neither but still have
+        bash. Keep this best-effort because mux-debug is an operator aid.
+        """
+        payload = json.dumps(
+            {"jsonrpc": "2.0", "method": method, "params": [], "id": 1}
+        )
+        url = f"http://localhost:{port}"
+
+        commands = [
+            [
+                "sh",
+                "-c",
+                "curl -s "
+                + url
+                + " -X POST -H 'Content-Type: application/json' --data "
+                + repr(payload),
+            ],
+            [
+                "sh",
+                "-c",
+                "wget -q -O - --header='Content-Type: application/json' "
+                + "--post-data="
+                + repr(payload)
+                + " "
+                + url,
+            ],
+            [
+                "bash",
+                "-lc",
+                (
+                    "payload="
+                    + repr(payload)
+                    + "; "
+                    + f"exec 3<>/dev/tcp/127.0.0.1/{port}; "
+                    + "printf 'POST / HTTP/1.1\\r\\nHost: localhost\\r\\n"
+                    + "Content-Type: application/json\\r\\nContent-Length: %s\\r\\n"
+                    + "Connection: close\\r\\n\\r\\n%s' \"${#payload}\" \"$payload\" >&3; "
+                    + "cat <&3"
+                ),
+            ],
+        ]
+
+        for command in commands:
+            result = self.client.exec_pod(pod_name, namespace, command)
+            if result.returncode != 0 or not result.stdout.strip():
+                continue
+            body = result.stdout.strip()
+            if "\r\n\r\n" in body:
+                body = body.split("\r\n\r\n", 1)[1]
+            elif "\n\n" in body:
+                body = body.split("\n\n", 1)[1]
+            try:
+                return json.loads(body)
+            except json.JSONDecodeError:
+                logger.debug("Invalid JSON-RPC response for %s: %s", method, body)
+
+        return None
+
     def _get_geth_enode(self, pod_name: str, namespace: str) -> Optional[PeerInfo]:
         """Get enode from geth pod"""
         logger.debug(f"Getting enode from geth pod: {namespace}/{pod_name}")
@@ -383,26 +447,12 @@ class P2PTester:
             enode = result.stdout.strip().strip('"')
             return self._parse_enode(enode, pod_name, namespace)
 
-        # Try HTTP RPC
-        result = self.client.exec_pod(
-            pod_name,
-            namespace,
-            [
-                "sh",
-                "-c",
-                'curl -s http://localhost:8545 -X POST -H "Content-Type: application/json" '
-                '--data \'{"jsonrpc":"2.0","method":"admin_nodeInfo","params":[],"id":1}\'',
-            ],
-        )
-
-        if result.returncode == 0 and result.stdout.strip():
-            try:
-                response = json.loads(result.stdout)
-                if "result" in response and "enode" in response["result"]:
-                    enode = response["result"]["enode"]
-                    return self._parse_enode(enode, pod_name, namespace)
-            except json.JSONDecodeError:
-                pass
+        # Try HTTP RPC. This covers op-reth and geth images where admin RPC is
+        # enabled but the execution client CLI is not available in the container.
+        response = self._exec_json_rpc(pod_name, namespace, 8545, "admin_nodeInfo")
+        if response and "result" in response and "enode" in response["result"]:
+            enode = response["result"]["enode"]
+            return self._parse_enode(enode, pod_name, namespace)
 
         return None
 
