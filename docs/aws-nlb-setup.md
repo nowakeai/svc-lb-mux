@@ -113,6 +113,8 @@ spec:
 
 By default, the controller uses each channel `spec.ports[].port` as the mux external port and mirrors the channel endpoints onto the mux Service. Channel Services should normally set `allocateLoadBalancerNodePorts: false`; the mux Service is the only Service that needs provider-facing load balancer plumbing.
 
+If the desired public mux port is already in `spec.ports[].port`, no `external-ports` annotation is needed. For the full port model, see [Channel Service manual](channel-services.md).
+
 To expose a different mux port without changing the channel Service port, add the configured API prefix annotation:
 
 ```yaml

@@ -162,6 +162,9 @@ Channel rules:
 - Each `(external port, protocol)` pair can be claimed by only one channel on the same mux.
 
 By default, the controller uses `spec.ports[].port` as the external mux port.
+If the desired public mux port is already in `spec.ports[].port`, no
+`external-ports` annotation is needed. For the full port model, see
+[Channel Service manual](channel-services.md).
 
 To override the external port:
 

@@ -89,6 +89,8 @@ api:
 
 Set `api.prefix` in your values file if your organization needs a different prefix. The controller uses this prefix for annotations, finalizers, and `loadBalancerClass` references.
 
+For a complete first install and validation flow, see [docs/getting-started.md](docs/getting-started.md).
+
 ## Default Mux Values
 
 The chart defaults are conservative for GKE:
@@ -137,6 +139,10 @@ Rules:
 - Channels normally set `allocateLoadBalancerNodePorts: false`; the mux owns the provider-facing load balancer ports.
 - By default, the channel Service port is used as the external mux port.
 
+If the desired public mux port is the same as the channel Service port, set
+`spec.ports[].port` directly and do not add `external-ports`. For the full port
+model, see [docs/channel-services.md](docs/channel-services.md).
+
 To expose a different external mux port, use `external-ports`:
 
 ```yaml
@@ -184,11 +190,16 @@ Important follow-up work before treating `svc-lb-mux` as a broadly complete prod
 
 ## Documentation
 
+Start with the [documentation map](docs/README.md) if you are not sure which guide to read.
+
+- [Getting started](docs/getting-started.md)
+- [Channel Service manual](docs/channel-services.md)
+- [Tutorials and common cases](docs/tutorials.md)
+- [Troubleshooting](docs/troubleshooting.md)
 - [GKE LoadBalancer setup](docs/gke-lb-setup.md)
 - [AWS NLB setup](docs/aws-nlb-setup.md)
-- [Controller design and features](docs/controller.md)
 - [GitOps compatibility](docs/gitops.md)
-- [GKE pressure test report](docs/gke-pressure-test-report.md)
+- [Controller design and features](docs/controller.md)
 - [Roadmap](ROADMAP.md)
 
 ## Development
