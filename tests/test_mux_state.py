@@ -265,6 +265,35 @@ class MuxStateTest(unittest.TestCase):
 
         self.assertEqual(state.allocate(auto, auto["spec"]["ports"][0]), 30001)
 
+    def test_static_port_channel_works_when_state_store_unavailable(self):
+        """When build_mux_state falls back due to a store load error it passes
+        state={} and store=None.  Channels with static ports must still
+        reconcile normally; only auto-allocation should fail."""
+        channel = channel_service(name="api", port=30001)
+        # Simulate the fallback: empty state, no persisted claims.
+        state = MuxState(("svc-mux", "mux"), state={}, channels=[channel])
+
+        self.assertFalse(state.changed)
+        state.record_channel_claims(channel, "http:30001->30001")
+
+        self.assertTrue(state.changed)
+        saved = state.to_state()
+        self.assertEqual(saved["portClaims"][0]["muxPort"], 30001)
+        self.assertEqual(saved["portClaims"][0]["source"], "static")
+
+    def test_auto_allocation_fails_with_clear_error_when_state_store_unavailable(self):
+        """When build_mux_state falls back it uses ranges=[] so auto-allocation
+        raises a descriptive error that becomes a per-channel error event."""
+        channel = channel_service(
+            name="api",
+            port=80,
+            annotations={"svc-mux.nowake.ai/external-ports": "http:auto"},
+        )
+        state = MuxState(("svc-mux", "mux"), ranges=[], state={}, channels=[channel])
+
+        with self.assertRaisesRegex(ValueError, "requires a mux port range"):
+            state.allocate(channel, channel["spec"]["ports"][0])
+
 
 def channel_service(name="api", namespace="app", port=80, annotations=None):
     return {

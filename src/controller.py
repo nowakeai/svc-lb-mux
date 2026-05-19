@@ -368,6 +368,7 @@ def build_mux_state(mux, mux_key, channels, event_body, reserved_port_owners=Non
         )
         ranges = []
 
+    reserved_ports = collect_static_port_claims(channels)
     store = ConfigMapAllocationStore(
         namespace=mux.namespace,
         name=allocation_configmap_name(mux),
@@ -375,14 +376,26 @@ def build_mux_state(mux, mux_key, channels, event_body, reserved_port_owners=Non
     )
     try:
         state = store.load()
-        reserved_ports = collect_static_port_claims(channels)
     except ValueError as error:
         events.error(
             event_body,
             reason="PortAllocationStoreInvalid",
             message=str(error),
         )
-        return None, None
+        # Fall back to stateless mode: channels with static ports still reconcile
+        # normally; channels using auto allocation will fail per-channel with a
+        # clear error event and be retried on the next iteration.
+        return (
+            MuxState(
+                mux_key,
+                ranges=ranges,
+                state={},
+                channels=channels,
+                reserved_ports=reserved_ports,
+                reserved_port_owners=reserved_port_owners,
+            ),
+            None,
+        )
 
     return (
         MuxState(
@@ -477,8 +490,6 @@ def mux_daemon(
             body,
             reserved_port_owners=recovered_port_owners,
         )
-        if mux_state is None:
-            continue
         port_owners = dict(recovered_port_owners)
         port_owners.update(mux_state.port_owners())
         for ch in sorted_channels:
