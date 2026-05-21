@@ -36,6 +36,25 @@ provider guide that matches your cluster.
 - [GKE pressure test report](gke-pressure-test-report.md): sanitized
   100-channel, 100-backend validation report.
 
+## nowake.ai Docs Site Source Contract
+
+Some documents in this repository are rendered by the nowake.ai website docs
+site through its explicit source manifest. Keep those source documents suitable
+for both this repository and the website renderer:
+
+- Keep the project repository as the source of truth; do not add website-only
+  Starlight frontmatter here.
+- Start each public source document with exactly one top-level `#` heading. The
+  website sync step removes that heading and injects site frontmatter from its
+  manifest.
+- Use relative links for other repository docs. The website sync step rewrites
+  manifest-listed links to `/docs/...` and leaves other repository links as
+  GitHub source links.
+- Keep public docs task-oriented: problem, prerequisites, commands or config,
+  expected output, common failure signals, current limits, and next links.
+- Keep provider limits and GitOps/runtime-field caveats close to the commands
+  they affect.
+
 ## Project
 
 - [Roadmap](../ROADMAP.md)
