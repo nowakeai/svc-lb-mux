@@ -64,7 +64,7 @@ Install with defaults:
 
 ```console
 helm install svc-mux oci://ghcr.io/nowakeai/charts/svc-lb-mux \
-  --version 0.1.1 \
+  --version 0.1.2 \
   --namespace svc-mux \
   --create-namespace
 
@@ -103,7 +103,7 @@ defaultLoadBalancer:
 
 ```console
 helm upgrade --install svc-mux oci://ghcr.io/nowakeai/charts/svc-lb-mux \
-  --version 0.1.1 \
+  --version 0.1.2 \
   --namespace svc-mux \
   --create-namespace \
   --set defaultLoadBalancer.loadBalancerIP=$MUX_IP
@@ -123,7 +123,7 @@ defaultLoadBalancer:
 
 ```console
 helm upgrade --install svc-mux oci://ghcr.io/nowakeai/charts/svc-lb-mux \
-  --version 0.1.1 \
+  --version 0.1.2 \
   --namespace svc-mux \
   --create-namespace \
   --set-string defaultLoadBalancer.annotations.networking\.gke\.io/load-balancer-ip-addresses=$ADDRESS_NAME \

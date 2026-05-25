@@ -47,7 +47,7 @@ Save those settings in an AWS-specific values file, for example `aws-values.yaml
 
 ```console
 helm upgrade --install svc-mux oci://ghcr.io/nowakeai/charts/svc-lb-mux \
-  --version 0.1.1 \
+  --version 0.1.2 \
   --namespace svc-mux \
   --create-namespace \
   --values aws-values.yaml

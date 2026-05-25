@@ -38,7 +38,7 @@ Install the chart with the default mux enabled:
 
 ```console
 helm install svc-mux oci://ghcr.io/nowakeai/charts/svc-lb-mux \
-  --version 0.1.1 \
+  --version 0.1.2 \
   --namespace svc-mux \
   --create-namespace
 ```
