@@ -7,6 +7,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from models import MuxEp, MuxPort
 from port_allocations import AUTO_PORT
 from reconcile import (
+    aggregate_external_dns_annotations,
+    apply_aggregated_external_dns_annotations,
     build_generated_endpoints_metadata,
     build_mux_ports,
     channel_refs,
@@ -14,6 +16,7 @@ from reconcile import (
     collect_existing_port_owners,
     collect_static_port_claims,
     count_ready_channel_pods,
+    external_dns_aggregation_conflicts,
     effective_mux_max_ports,
     find_mux_port_conflicts,
     get_current_endpoints_set,
@@ -130,6 +133,116 @@ class ReconcileHelperTest(unittest.TestCase):
 
         self.assertEqual(len(conflicts), 1)
         self.assertEqual(owners, {})
+
+    def test_external_dns_aggregation_uses_mux_hostname_annotation_only(self):
+        channels = [
+            channel_service(
+                name="web",
+                annotations={
+                    "external-dns.alpha.kubernetes.io/hostname": "ignored.example.com",
+                    "svc-mux.nowake.ai/external-dns-hostname": "web.example.com",
+                    "external-dns.alpha.kubernetes.io/cloudflare-proxied": "true",
+                },
+            ),
+            channel_service(
+                name="api",
+                annotations={
+                    "svc-mux.nowake.ai/external-dns-hostname": "api.example.com, web.example.com",
+                    "external-dns.alpha.kubernetes.io/cloudflare-proxied": "false",
+                },
+            ),
+            channel_service(
+                name="raw",
+                annotations={
+                    "external-dns.alpha.kubernetes.io/hostname": "raw.example.com",
+                },
+            ),
+        ]
+
+        self.assertEqual(
+            aggregate_external_dns_annotations(channels),
+            {
+                "external-dns.alpha.kubernetes.io/hostname": "api.example.com,web.example.com",
+                "external-dns.alpha.kubernetes.io/cloudflare-proxied": "false",
+            },
+        )
+
+    def test_apply_aggregated_external_dns_preserves_user_owned_mux_keys(self):
+        mux_annotations = {
+            "external-dns.alpha.kubernetes.io/hostname": "mux.example.com",
+            "external-dns.alpha.kubernetes.io/cloudflare-proxied": "true",
+        }
+        aggregated = {
+            "external-dns.alpha.kubernetes.io/hostname": "api.example.com",
+            "external-dns.alpha.kubernetes.io/cloudflare-proxied": "false",
+        }
+
+        self.assertEqual(
+            apply_aggregated_external_dns_annotations(mux_annotations, aggregated),
+            mux_annotations,
+        )
+
+    def test_apply_aggregated_external_dns_updates_controller_owned_keys(self):
+        mux_annotations = {
+            "external-dns.alpha.kubernetes.io/hostname": "old.example.com",
+            "external-dns.alpha.kubernetes.io/cloudflare-proxied": "true",
+            "svc-mux.nowake.ai/aggregated-external-dns": (
+                "external-dns.alpha.kubernetes.io/hostname,"
+                "external-dns.alpha.kubernetes.io/cloudflare-proxied"
+            ),
+        }
+        aggregated = {"external-dns.alpha.kubernetes.io/hostname": "api.example.com"}
+
+        self.assertEqual(
+            apply_aggregated_external_dns_annotations(mux_annotations, aggregated),
+            {
+                "external-dns.alpha.kubernetes.io/hostname": "api.example.com",
+                "svc-mux.nowake.ai/aggregated-external-dns": (
+                    "external-dns.alpha.kubernetes.io/hostname"
+                ),
+            },
+        )
+
+    def test_external_dns_conflicts_only_for_user_owned_mux_keys(self):
+        channel = channel_service(
+            annotations={
+                "svc-mux.nowake.ai/external-dns-hostname": "api.example.com",
+                "external-dns.alpha.kubernetes.io/cloudflare-proxied": "false",
+            }
+        )
+        mux_annotations = {
+            "external-dns.alpha.kubernetes.io/hostname": "mux.example.com",
+            "external-dns.alpha.kubernetes.io/cloudflare-proxied": "true",
+        }
+
+        conflicts = external_dns_aggregation_conflicts(mux_annotations, [channel])
+
+        self.assertEqual(
+            [(item[1], item[2]) for item in conflicts],
+            [
+                (
+                    "svc-mux.nowake.ai/external-dns-hostname",
+                    "external-dns.alpha.kubernetes.io/hostname",
+                ),
+                (
+                    "external-dns.alpha.kubernetes.io/cloudflare-proxied",
+                    "external-dns.alpha.kubernetes.io/cloudflare-proxied",
+                ),
+            ],
+        )
+        self.assertEqual(
+            external_dns_aggregation_conflicts(
+                {
+                    **mux_annotations,
+                    "svc-mux.nowake.ai/aggregated-external-dns": (
+                        "external-dns.alpha.kubernetes.io/hostname,"
+                        "external-dns.alpha.kubernetes.io/cloudflare-proxied"
+                    ),
+                },
+                [channel],
+            ),
+            [],
+        )
 
     def test_parse_external_ports_annotation(self):
         self.assertEqual(

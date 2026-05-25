@@ -121,7 +121,69 @@ kubectl get svc worker-api -n app \
   -o go-template='{{index .metadata.annotations "svc-mux.nowake.ai/ports"}}{{"\n"}}'
 ```
 
-## Case 4: Migrate Existing LoadBalancer Services
+## Case 4: Aggregate External DNS Hostnames
+
+Use this when several channel Services should contribute hostnames to the same
+mux Service without making external-dns process duplicate hostname ownership on
+each channel.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: app
+  annotations:
+    svc-mux.nowake.ai/external-dns-hostname: "app.example.com,api.example.com"
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+spec:
+  type: LoadBalancer
+  loadBalancerClass: svc-mux.nowake.ai/mux.svc-mux
+  allocateLoadBalancerNodePorts: false
+  selector:
+    app: api
+  ports:
+    - name: http
+      port: 443
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin
+  namespace: app
+  annotations:
+    svc-mux.nowake.ai/external-dns-hostname: "app.example.com,admin.example.com"
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+spec:
+  type: LoadBalancer
+  loadBalancerClass: svc-mux.nowake.ai/mux.svc-mux
+  allocateLoadBalancerNodePorts: false
+  selector:
+    app: admin
+  ports:
+    - name: http
+      port: 8443
+      targetPort: http
+```
+
+The controller writes the external-dns annotations on the mux Service, not on
+each channel Service:
+
+```yaml
+metadata:
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: "app.example.com,admin.example.com,api.example.com"
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+    svc-mux.nowake.ai/aggregated-external-dns: "external-dns.alpha.kubernetes.io/hostname,external-dns.alpha.kubernetes.io/cloudflare-proxied"
+```
+
+Aggregated hostnames are de-duplicated. Output order is stable because channels
+are processed by namespace/name, with each channel annotation parsed left to
+right. Do not put `external-dns.alpha.kubernetes.io/hostname` on channel
+Services for mux aggregation.
+
+## Case 5: Migrate Existing LoadBalancer Services
 
 Use this when a workload already has a normal provider-backed `LoadBalancer`
 Service and you want to test the mux path before cutting DNS.
@@ -158,7 +220,7 @@ spec:
 The channel port `20301` is meaningful: it is the mux public port. The
 `targetPort` points at the backend pod port.
 
-## Case 5: Expose P2P Or Other Raw TCP Workloads
+## Case 6: Expose P2P Or Other Raw TCP Workloads
 
 Use one channel per backend component when different components expose
 different target ports. Do not combine unrelated components under one selector
@@ -209,7 +271,7 @@ p2ptcp:20301->20301
 p2p:10301->10301
 ```
 
-## Case 6: Split Capacity Across Multiple Muxes
+## Case 7: Split Capacity Across Multiple Muxes
 
 Use multiple muxes when provider limits, blast radius, ownership, or port ranges
 should be separated.
@@ -236,7 +298,7 @@ rollup-p2p: 20100-20199
 On GKE, one mux is limited to 100 Service ports. Split high-port workloads
 before reaching that limit.
 
-## Case 7: Manage Muxes With GitOps
+## Case 8: Manage Muxes With GitOps
 
 Use GitOps for desired provider settings and channel specs, but ignore
 controller-owned runtime fields.

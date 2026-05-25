@@ -40,11 +40,22 @@ ANNOTATION_EXTERNAL_PORTS = f"{API_PREFIX}/external-ports"
 ANNOTATION_PORT_RANGE = f"{API_PREFIX}/port-range"
 ANNOTATION_MAX_PORTS = f"{API_PREFIX}/max-ports"
 ANNOTATION_ALLOCATION_CONFIGMAP = f"{API_PREFIX}/allocation-configmap"
+ANNOTATION_EXTERNAL_DNS_HOSTNAME = f"{API_PREFIX}/external-dns-hostname"
+ANNOTATION_EXTERNAL_DNS_AGGREGATED = f"{API_PREFIX}/aggregated-external-dns"
 ANNOTATION_CHANNELS = f"{API_PREFIX}/channels"
 ANNOTATION_TOPOLOGY = f"{API_PREFIX}/topology"
 ANNOTATION_SUMMARY = f"{API_PREFIX}/summary"
 ANNOTATION_MANAGED = f"{API_PREFIX}/managed"
 FINALIZER = f"{API_PREFIX}/finalizer"
+
+EXTERNAL_DNS_HOSTNAME_ANNOTATION = "external-dns.alpha.kubernetes.io/hostname"
+EXTERNAL_DNS_CLOUDFLARE_PROXIED_ANNOTATION = (
+    "external-dns.alpha.kubernetes.io/cloudflare-proxied"
+)
+AGGREGATED_EXTERNAL_DNS_ANNOTATIONS = (
+    EXTERNAL_DNS_HOSTNAME_ANNOTATION,
+    EXTERNAL_DNS_CLOUDFLARE_PROXIED_ANNOTATION,
+)
 
 
 def annotation_key(name: str, prefix: str = API_PREFIX) -> str:

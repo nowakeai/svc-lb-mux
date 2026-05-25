@@ -80,6 +80,35 @@ class DebugStateTest(unittest.TestCase):
         self.assertEqual(snapshot["endpoints"]["app/api"]["pods"], ["app/api-0"])
         self.assertFalse(store.topology()["svc-mux/mux"]["mux_missing"])
 
+    def test_channel_state_uses_mux_dns_hostname_annotation(self):
+        store = DebugStateStore()
+        memo = SimpleNamespace(mux_queues={"svc-mux/mux": object()}, endpoints={})
+        channel = {
+            "metadata": {
+                "namespace": "app",
+                "name": "api",
+                "annotations": {
+                    "svc-mux.nowake.ai/external-dns-hostname": "api.example.com",
+                },
+            },
+            "spec": {
+                "loadBalancerClass": "svc-mux.nowake.ai/mux.svc-mux",
+                "ports": [],
+            },
+            "status": {},
+        }
+
+        store.update_mux_state(
+            memo,
+            {("svc-mux", "mux"): {FrozenDict(channel)}},
+            ("svc-mux", "mux"),
+            {"metadata": {"annotations": {}}, "status": {}},
+        )
+
+        channel_state = store.snapshot()["channel_services"]["app/api"]
+        self.assertEqual(channel_state["external_dns"], "api.example.com")
+        self.assertEqual(channel_state["custom_dns"], "api.example.com")
+
     def test_record_event_coalesces_duplicate_events(self):
         store = DebugStateStore()
 

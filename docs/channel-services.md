@@ -144,6 +144,37 @@ stealing an existing port after a restart.
 
 Do not reuse one state ConfigMap for multiple muxes.
 
+## Aggregate External DNS Hostnames
+
+Use `<api-prefix>/external-dns-hostname` on channel Services when multiple
+channels should contribute hostnames to the mux Service. The controller
+aggregates those values onto the mux as
+`external-dns.alpha.kubernetes.io/hostname`, de-duplicates hostnames, and keeps
+the order stable by channel namespace and name.
+
+```yaml
+metadata:
+  annotations:
+    svc-mux.nowake.ai/external-dns-hostname: "api.example.com,www.example.com"
+```
+
+Do not use `external-dns.alpha.kubernetes.io/hostname` on channel Services for
+mux aggregation. The controller ignores that annotation on channels so
+external-dns does not see duplicate ownership on several channel Services.
+
+If channel Services set
+`external-dns.alpha.kubernetes.io/cloudflare-proxied`, the controller aggregates
+it onto the mux with AND semantics. Any channel value of `"false"` makes the
+mux annotation `"false"`; otherwise all explicit `"true"` values produce
+`"true"`.
+
+If the mux Service already has
+`external-dns.alpha.kubernetes.io/hostname` or
+`external-dns.alpha.kubernetes.io/cloudflare-proxied` without controller
+ownership metadata, the controller treats that annotation as user- or
+GitOps-owned, leaves it unchanged, and emits warning events for channel
+annotations that cannot be aggregated.
+
 ## Multiple Ports
 
 A channel can expose multiple named ports:

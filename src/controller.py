@@ -33,12 +33,15 @@ from port_allocations import (
 )
 from mux_state import MuxState
 from reconcile import (
+    aggregate_external_dns_annotations,
+    apply_aggregated_external_dns_annotations,
     build_generated_endpoints_metadata,
     build_mux_ports,
     collect_channel_endpoints,
     collect_existing_port_owners,
     collect_static_port_claims,
     count_ready_channel_pods,
+    external_dns_aggregation_conflicts,
     get_current_endpoints_set,
     get_old_endpoints_set,
     effective_mux_max_ports,
@@ -595,20 +598,36 @@ def mux_daemon(
         total_pods = count_ready_channel_pods(channels, memo)
         anno_summary = format_summary_annotation(list(channels), total_ports, total_pods, mux_external_dns)
 
-        # Check if annotations need update
-        annotations_changed = (
-            mux.annotations.get(ANNOTATION_CHANNELS) != anno_chans
-            or mux.annotations.get(ANNOTATION_TOPOLOGY) != anno_topology
-            or mux.annotations.get(ANNOTATION_SUMMARY) != anno_summary
+        current_mux_annotations = dict(mux.annotations or {})
+        aggregated_external_dns = aggregate_external_dns_annotations(sorted_channels)
+        for ch, channel_annotation, mux_annotation in external_dns_aggregation_conflicts(
+            current_mux_annotations, sorted_channels
+        ):
+            events.warn(
+                ch,
+                reason="MuxExternalDnsAnnotationConflict",
+                message=(
+                    f"channel annotation {channel_annotation} cannot be aggregated because "
+                    f"mux {namespace}/{name} already owns {mux_annotation}"
+                ),
+            )
+
+        desired_mux_annotations = apply_aggregated_external_dns_annotations(
+            current_mux_annotations, aggregated_external_dns
         )
+        desired_mux_annotations[ANNOTATION_CHANNELS] = anno_chans
+        desired_mux_annotations[ANNOTATION_TOPOLOGY] = anno_topology
+        desired_mux_annotations[ANNOTATION_SUMMARY] = anno_summary
+
+        annotations_changed = current_mux_annotations != desired_mux_annotations
 
         if annotations_changed:
-            mux.annotations[ANNOTATION_CHANNELS] = anno_chans
-            mux.annotations[ANNOTATION_TOPOLOGY] = anno_topology
-            mux.annotations[ANNOTATION_SUMMARY] = anno_summary
+            patch_annotations = dict(desired_mux_annotations)
+            for key in set(current_mux_annotations) - set(desired_mux_annotations):
+                patch_annotations[key] = None
 
             if not DRYRUN_MODE:
-                mux.patch({"metadata": {"annotations": mux.annotations}})
+                mux.patch({"metadata": {"annotations": patch_annotations}})
                 # Only emit event in production mode
                 events.info(
                     body,

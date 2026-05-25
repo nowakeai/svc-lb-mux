@@ -366,19 +366,23 @@ Implementation details:
 
 ## Mux Readability Annotations
 
-The controller writes three mux annotations for operator readability:
+The controller writes mux readability annotations and may write controller-owned external-dns annotations:
 
 | Annotation | Purpose |
 | --- | --- |
 | `<api-prefix>/channels` | JSON list of channel namespace/name references. |
 | `<api-prefix>/topology` | Multi-line human-readable channel, DNS, port, and backend summary. |
 | `<api-prefix>/summary` | One-line summary of channels, ports, ready pods, and mux DNS/IP. |
+| `<api-prefix>/aggregated-external-dns` | Tracks which mux external-dns annotations are controller-owned. |
+| `external-dns.alpha.kubernetes.io/hostname` | Aggregated from channel `<api-prefix>/external-dns-hostname` when the mux key is not user-owned. |
+| `external-dns.alpha.kubernetes.io/cloudflare-proxied` | Aggregated from channel Cloudflare proxied values with AND semantics when the mux key is not user-owned. |
 
 Implementation details:
 
 - `format_topology_annotation()` includes mux DNS/IP, channel DNS hint, port mappings, and ready backend pod count.
 - `format_summary_annotation()` produces compact text such as `100 channel(s) | 100 port(s) | 100 pod(s) | DNS: 203.0.113.10`.
 - Annotation changes emit `MuxAnnotationsUpdated`.
+- If a mux external-dns annotation is user-owned, channel aggregation for that key is skipped and a warning event is emitted.
 
 ## Events
 
@@ -408,6 +412,7 @@ Common warning/error events:
 | `MuxPortConflict` | Two mappings want the same `(external port, protocol)`. |
 | `MuxPortLimitExceeded` | A channel would exceed the mux port limit. |
 | `GkePortLimitApplied` | GKE mux was capped or defaulted to the 100-port limit. |
+| `MuxExternalDnsAnnotationConflict` | A channel requested external-dns aggregation for a mux annotation that is user- or GitOps-owned. |
 
 `src/events.py` also records events into the debug UI state. Event creation is cached to avoid excessive duplicate events.
 

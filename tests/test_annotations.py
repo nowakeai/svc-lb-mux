@@ -70,6 +70,25 @@ class AnnotationFormattingTest(unittest.TestCase):
         self.assertIn("Ports: http:80->30080", topology)
         self.assertIn("Backend: 2 pod(s) ready", topology)
 
+    def test_topology_annotation_ignores_channel_external_dns_hostname(self):
+        memo = SimpleNamespace(endpoints={})
+        channel = {
+            "metadata": {
+                "namespace": "app",
+                "name": "api",
+                "annotations": {
+                    "external-dns.alpha.kubernetes.io/hostname": "ignored.example.com"
+                },
+            },
+            "spec": {"ports": [{"name": "http", "port": 80, "protocol": "TCP"}]},
+        }
+
+        topology = format_topology_annotation([channel], memo, "mux.example.com")
+
+        self.assertIn("DNS: mux.example.com", topology)
+        self.assertNotIn("ignored.example.com", topology)
+        self.assertNotIn("(custom)", topology)
+
     def test_topology_annotation_uses_mux_port_annotation_without_nodeport(self):
         memo = SimpleNamespace(endpoints={})
         channel = {
