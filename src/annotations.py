@@ -1,6 +1,6 @@
 """Human-readable annotation formatting helpers."""
 
-from config import ANNOTATION_PORTS
+from config import ANNOTATION_EXTERNAL_DNS_HOSTNAME, ANNOTATION_PORTS
 import utils
 
 
@@ -25,9 +25,7 @@ def format_topology_annotation(channels, memo, mux_external_dns=None):
         ch_key = (ch_ns, ch_name)
 
         ch_annotations = ch.get("metadata", {}).get("annotations", {})
-        ch_dns_annotation = ch_annotations.get(
-            "external-dns.alpha.kubernetes.io/hostname"
-        )
+        ch_dns_annotation = ch_annotations.get(ANNOTATION_EXTERNAL_DNS_HOSTNAME)
         custom_dns_marker = " (custom)" if ch_dns_annotation else ""
 
         if ch_dns_annotation:

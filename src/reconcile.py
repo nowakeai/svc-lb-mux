@@ -6,14 +6,20 @@ from hashlib import sha256
 from kr8s.objects import Service
 
 from annotations import format_channel_port_annotation, parse_port_mappings
+from utils import parse_external_dns
 from config import (
     ANNOTATION_CHANNELS,
     ANNOTATION_MANAGED,
+    AGGREGATED_EXTERNAL_DNS_ANNOTATIONS,
+    ANNOTATION_EXTERNAL_DNS_AGGREGATED,
+    ANNOTATION_EXTERNAL_DNS_HOSTNAME,
     ANNOTATION_EXTERNAL_PORTS,
     ANNOTATION_MAX_PORTS,
     ANNOTATION_PORTS,
     DRYRUN_MODE,
     GKE_LOAD_BALANCER_CLASS_PREFIX,
+    EXTERNAL_DNS_CLOUDFLARE_PROXIED_ANNOTATION,
+    EXTERNAL_DNS_HOSTNAME_ANNOTATION,
     GKE_PROVIDER_ANNOTATIONS,
     GKE_SERVICE_LOADBALANCER_MAX_PORTS,
     annotation_key,
@@ -52,6 +58,134 @@ def parse_external_ports_annotation(value: str):
             ports[name] = validate_port_number(port_text.strip(), ANNOTATION_EXTERNAL_PORTS)
 
     return ports
+
+
+def parse_aggregated_external_dns_keys(value):
+    """Parse the mux annotation that tracks controller-owned external-dns keys."""
+    if not value:
+        return set()
+    return {item.strip() for item in value.split(",") if item.strip()}
+
+
+def format_aggregated_external_dns_keys(keys):
+    """Format controller-owned external-dns keys in a stable order."""
+    ordered = [key for key in AGGREGATED_EXTERNAL_DNS_ANNOTATIONS if key in keys]
+    return ",".join(ordered)
+
+
+def channel_external_dns_hostname(channel):
+    """Return the svc-lb-mux channel DNS annotation used for mux aggregation."""
+    annotations = channel.get("metadata", {}).get("annotations", {}) or {}
+    return annotations.get(ANNOTATION_EXTERNAL_DNS_HOSTNAME)
+
+
+def aggregate_external_dns_annotations(channels):
+    """Build external-dns annotations that should be published on the mux."""
+    hostnames = []
+    seen_hostnames = set()
+    saw_cloudflare_proxied = False
+    cloudflare_proxied = True
+
+    for channel in sorted(
+        channels,
+        key=lambda item: (item["metadata"]["namespace"], item["metadata"]["name"]),
+    ):
+        annotations = channel.get("metadata", {}).get("annotations", {}) or {}
+
+        for hostname in parse_external_dns(channel_external_dns_hostname(channel)):
+            if hostname in seen_hostnames:
+                continue
+            seen_hostnames.add(hostname)
+            hostnames.append(hostname)
+
+        if EXTERNAL_DNS_CLOUDFLARE_PROXIED_ANNOTATION not in annotations:
+            continue
+        proxied_value = str(
+            annotations[EXTERNAL_DNS_CLOUDFLARE_PROXIED_ANNOTATION]
+        ).strip().lower()
+        if proxied_value not in ("true", "false"):
+            continue
+        saw_cloudflare_proxied = True
+        cloudflare_proxied = cloudflare_proxied and proxied_value == "true"
+
+    aggregated = {}
+    if hostnames:
+        aggregated[EXTERNAL_DNS_HOSTNAME_ANNOTATION] = ",".join(hostnames)
+    if saw_cloudflare_proxied:
+        aggregated[EXTERNAL_DNS_CLOUDFLARE_PROXIED_ANNOTATION] = str(
+            cloudflare_proxied
+        ).lower()
+    return aggregated
+
+
+def external_dns_aggregation_conflicts(mux_annotations, channels):
+    """Return channel annotations that cannot be aggregated due to mux ownership."""
+    mux_annotations = mux_annotations or {}
+    managed_keys = parse_aggregated_external_dns_keys(
+        mux_annotations.get(ANNOTATION_EXTERNAL_DNS_AGGREGATED)
+    )
+    hostname_user_owned = (
+        EXTERNAL_DNS_HOSTNAME_ANNOTATION in mux_annotations
+        and EXTERNAL_DNS_HOSTNAME_ANNOTATION not in managed_keys
+    )
+    cloudflare_user_owned = (
+        EXTERNAL_DNS_CLOUDFLARE_PROXIED_ANNOTATION in mux_annotations
+        and EXTERNAL_DNS_CLOUDFLARE_PROXIED_ANNOTATION not in managed_keys
+    )
+
+    conflicts = []
+    for channel in sorted(
+        channels,
+        key=lambda item: (item["metadata"]["namespace"], item["metadata"]["name"]),
+    ):
+        annotations = channel.get("metadata", {}).get("annotations", {}) or {}
+        if hostname_user_owned and annotations.get(ANNOTATION_EXTERNAL_DNS_HOSTNAME):
+            conflicts.append(
+                (
+                    channel,
+                    ANNOTATION_EXTERNAL_DNS_HOSTNAME,
+                    EXTERNAL_DNS_HOSTNAME_ANNOTATION,
+                )
+            )
+        if (
+            cloudflare_user_owned
+            and EXTERNAL_DNS_CLOUDFLARE_PROXIED_ANNOTATION in annotations
+        ):
+            conflicts.append(
+                (
+                    channel,
+                    EXTERNAL_DNS_CLOUDFLARE_PROXIED_ANNOTATION,
+                    EXTERNAL_DNS_CLOUDFLARE_PROXIED_ANNOTATION,
+                )
+            )
+    return conflicts
+
+
+def apply_aggregated_external_dns_annotations(annotations, aggregated):
+    """Return mux annotations with controller-owned external-dns keys applied."""
+    desired = dict(annotations or {})
+    managed_keys = parse_aggregated_external_dns_keys(
+        desired.get(ANNOTATION_EXTERNAL_DNS_AGGREGATED)
+    )
+    next_managed_keys = set()
+
+    for key in AGGREGATED_EXTERNAL_DNS_ANNOTATIONS:
+        user_owned = key in desired and key not in managed_keys
+        if user_owned:
+            continue
+        if key in aggregated:
+            desired[key] = aggregated[key]
+            next_managed_keys.add(key)
+        else:
+            desired.pop(key, None)
+
+    if next_managed_keys:
+        desired[ANNOTATION_EXTERNAL_DNS_AGGREGATED] = (
+            format_aggregated_external_dns_keys(next_managed_keys)
+        )
+    else:
+        desired.pop(ANNOTATION_EXTERNAL_DNS_AGGREGATED, None)
+    return desired
 
 
 def validate_port_number(value, field: str) -> int:

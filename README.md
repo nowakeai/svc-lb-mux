@@ -161,6 +161,17 @@ metadata:
 
 Automatic assignments are stored in one ConfigMap per mux. This keeps mappings stable across controller restarts and GitOps re-application without coupling unrelated muxes to the same state object.
 
+For DNS, channel Services can declare hostnames with
+`svc-mux.nowake.ai/external-dns-hostname`. The controller deduplicates those
+values and writes `external-dns.alpha.kubernetes.io/hostname` on the mux Service,
+which avoids multiple channel Services competing for the same external-dns name.
+It ignores `external-dns.alpha.kubernetes.io/hostname` on channel Services.
+Channel `external-dns.alpha.kubernetes.io/cloudflare-proxied` values are
+aggregated with AND semantics, so any explicit `"false"` makes the mux value
+`"false"`. If the mux already has user-managed external-dns annotations, the
+controller leaves them unchanged and emits warning events instead of fighting
+GitOps.
+
 ## GitOps
 
 The controller owns the mux Service runtime `spec.ports` because that list is derived from active channels. If GitOps manages mux Services, configure it to ignore mux `spec.ports`; otherwise GitOps and the controller will continuously overwrite each other.

@@ -5,7 +5,7 @@ import threading
 from collections import deque
 from datetime import datetime
 
-from config import get_annotation
+from config import ANNOTATION_EXTERNAL_DNS_HOSTNAME, get_annotation
 
 logger = logging.getLogger(__name__)
 
@@ -263,9 +263,7 @@ class DebugStateStore:
         channel_ns = channel["metadata"]["namespace"]
         channel_name = channel["metadata"]["name"]
         annotations = channel.get("metadata", {}).get("annotations", {})
-        external_dns_annotation = annotations.get(
-            "external-dns.alpha.kubernetes.io/hostname"
-        )
+        external_dns_annotation = annotations.get(ANNOTATION_EXTERNAL_DNS_HOSTNAME)
         loadbalancer_ingress = (
             channel.get("status", {}).get("loadBalancer", {}).get("ingress", [])
         )
