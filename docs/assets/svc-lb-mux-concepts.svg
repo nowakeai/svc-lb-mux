@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1248" height="560" viewBox="0 0 1248 560" role="img" aria-labelledby="title desc">
+  <title id="title">svc-lb-mux concepts</title>
+  <desc id="desc">Clients connect to a provider layer 4 load balancer, which reaches a selectorless mux Service. The mux and channel Services route traffic to backend pods while the svc-lb-mux controller syncs ports, endpoints, and ingress status.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+      <path d="M 1 1 L 11 6 L 1 11 z" fill="#475569"/>
+    </marker>
+    <marker id="arrow-muted" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+      <path d="M 1 1 L 11 6 L 1 11 z" fill="#64748b"/>
+    </marker>
+    <linearGradient id="mux-fill" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#ecfeff"/>
+      <stop offset="100%" stop-color="#dbeafe"/>
+    </linearGradient>
+    <linearGradient id="channel-fill" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#eef2ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-16%" y="-24%" width="132%" height="152%">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .bg { fill: #ffffff; }
+      .group { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; rx: 18; }
+      .group.external { fill: #f0f9ff; stroke: #bae6fd; }
+      .group.controller { fill: #fff7ed; stroke: #fed7aa; }
+      .group.kubernetes { fill: #f8fafc; stroke: #cbd5e1; }
+      .group-title { fill: #0f172a; font: 700 18px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .node { filter: url(#shadow); rx: 12; stroke-width: 1.5; }
+      .node.external { fill: #eff6ff; stroke: #60a5fa; }
+      .node.lb { fill: #f0fdfa; stroke: #2dd4bf; }
+      .node.mux { fill: url(#mux-fill); stroke: #0284c7; }
+      .node.channel { fill: url(#channel-fill); stroke: #818cf8; }
+      .node.pods { fill: #f0fdf4; stroke: #22c55e; }
+      .node.controller { fill: #fff7ed; stroke: #fb923c; }
+      .title { fill: #0f172a; font: 700 16px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .sub { fill: #475569; font: 13px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .edge { fill: none; stroke: #475569; stroke-width: 2.2; marker-end: url(#arrow); }
+      .edge.soft { stroke: #64748b; stroke-width: 1.9; }
+      .sync { fill: none; stroke: #64748b; stroke-width: 1.9; stroke-dasharray: 6 7; marker-end: url(#arrow-muted); }
+      .label-box { fill: #ffffff; stroke: #e2e8f0; stroke-width: 1; rx: 8; }
+      .label { fill: #334155; font: 13px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1248" height="560"/>
+
+  <rect class="group external" x="32" y="58" width="458" height="142"/>
+  <text class="group-title" x="261" y="88" text-anchor="middle">External</text>
+
+  <rect class="group controller" x="192" y="244" width="298" height="246"/>
+  <text class="group-title" x="341" y="275" text-anchor="middle">Controller</text>
+
+  <rect class="group kubernetes" x="712" y="58" width="504" height="432"/>
+  <text class="group-title" x="964" y="88" text-anchor="middle">Kubernetes</text>
+
+  <rect class="node external" x="70" y="112" width="112" height="58"/>
+  <text class="title" x="126" y="137" text-anchor="middle">Clients</text>
+  <text class="sub" x="126" y="157" text-anchor="middle">TCP/UDP</text>
+
+  <rect class="node lb" x="250" y="112" width="240" height="58"/>
+  <text class="title" x="370" y="137" text-anchor="middle">Provider L4</text>
+  <text class="sub" x="370" y="157" text-anchor="middle">Load Balancer</text>
+
+  <rect class="node controller" x="273" y="340" width="136" height="58"/>
+  <text class="title" x="341" y="375" text-anchor="middle">svc-lb-mux</text>
+
+  <rect class="node mux" x="752" y="130" width="248" height="82"/>
+  <text class="title" x="876" y="162" text-anchor="middle">Mux Service</text>
+  <text class="sub" x="876" y="184" text-anchor="middle">selectorless LoadBalancer</text>
+
+  <rect class="node channel" x="752" y="292" width="248" height="82"/>
+  <text class="title" x="876" y="324" text-anchor="middle">Channel Service A</text>
+  <text class="sub" x="876" y="346" text-anchor="middle">loadBalancerClass -&gt; mux</text>
+
+  <rect class="node channel" x="752" y="414" width="248" height="58"/>
+  <text class="title" x="876" y="439" text-anchor="middle">Channel Service B</text>
+  <text class="sub" x="876" y="459" text-anchor="middle">loadBalancerClass -&gt; mux</text>
+
+  <rect class="node pods" x="1042" y="130" width="154" height="58"/>
+  <text class="title" x="1119" y="155" text-anchor="middle">Backend pods A</text>
+  <text class="sub" x="1119" y="175" text-anchor="middle">workloads</text>
+
+  <rect class="node pods" x="1042" y="414" width="154" height="58"/>
+  <text class="title" x="1119" y="439" text-anchor="middle">Backend pods B</text>
+  <text class="sub" x="1119" y="459" text-anchor="middle">workloads</text>
+
+  <path class="edge" d="M182 141 H250"/>
+  <path class="edge" d="M490 141 C584 141 644 139 712 156 C727 160 738 165 752 171"/>
+
+  <path class="edge soft" d="M1000 166 C1016 161 1026 159 1042 159"/>
+  <path class="edge soft" d="M876 212 C894 245 908 268 925 292"/>
+  <path class="edge soft" d="M1000 333 C1026 333 1034 287 1042 188"/>
+  <path class="edge soft" d="M1000 333 C1026 356 1034 386 1042 414"/>
+  <path class="edge soft" d="M1000 443 H1042"/>
+
+  <path class="sync" d="M409 359 C500 304 606 276 752 194"/>
+  <path class="sync" d="M409 369 H752"/>
+  <path class="sync" d="M409 386 C490 452 612 443 752 443"/>
+
+  <rect class="label-box" x="516" y="277" width="160" height="28"/>
+  <text class="label" x="596" y="296" text-anchor="middle">sync ports + endpoints</text>
+
+  <rect class="label-box" x="514" y="355" width="172" height="28"/>
+  <text class="label" x="600" y="374" text-anchor="middle">copy mux ingress status</text>
+
+  <rect class="label-box" x="514" y="429" width="172" height="28"/>
+  <text class="label" x="600" y="448" text-anchor="middle">copy mux ingress status</text>
+</svg>

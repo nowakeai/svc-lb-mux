@@ -28,34 +28,7 @@ The naming comes from electronic multiplexers: many input channels are carried t
 - **Mux**: a selectorless `LoadBalancer` Service that owns the shared provider L4 load balancer.
 - **Channel**: an application-facing `LoadBalancer` Service that points at a mux through `spec.loadBalancerClass`.
 
-```mermaid
-flowchart LR
-    subgraph ext[External]
-        client[Clients]
-        lb[Provider L4 Load Balancer]
-    end
-
-    subgraph k8s[Kubernetes]
-        mux["Mux Service<br/>selectorless LoadBalancer"]
-        ch1["Channel Service A<br/>loadBalancerClass -> mux"]
-        ch2["Channel Service B<br/>loadBalancerClass -> mux"]
-        pod1[Backend pods A]
-        pod2[Backend pods B]
-    end
-
-    subgraph ctl[Controller]
-        controller[svc-lb-mux]
-    end
-
-    client --> lb --> mux
-    mux --> pod1
-    mux --> pod2
-    ch1 --> pod1
-    ch2 --> pod2
-    controller -. "sync ports + endpoints" .-> mux
-    controller -. "copy mux ingress status" .-> ch1
-    controller -. "copy mux ingress status" .-> ch2
-```
+![svc-lb-mux concept diagram](docs/assets/svc-lb-mux-concepts.svg)
 
 The mux Service name does not have to be `mux`. A common production pattern is one mux per namespace or project, using a semantic name such as `payments`, `rollup-p2p`, or simply `mux` within each namespace.
 
