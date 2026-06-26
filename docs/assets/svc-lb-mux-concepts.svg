@@ -3,23 +3,30 @@
   <desc id="desc">Clients connect to a provider layer 4 load balancer, which reaches a selectorless mux Service. The mux and channel Services route traffic to backend pods while the svc-lb-mux controller syncs ports, endpoints, and ingress status.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
-      <path d="M 1 1 L 11 6 L 1 11 z" fill="#475569"/>
+      <path d="M 1 1 L 11 6 L 1 11 z"/>
     </marker>
     <marker id="arrow-muted" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
-      <path d="M 1 1 L 11 6 L 1 11 z" fill="#64748b"/>
+      <path d="M 1 1 L 11 6 L 1 11 z"/>
     </marker>
     <linearGradient id="mux-fill" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0%" stop-color="#ecfeff"/>
-      <stop offset="100%" stop-color="#dbeafe"/>
+      <stop class="mux-stop-1" offset="0%"/>
+      <stop class="mux-stop-2" offset="100%"/>
     </linearGradient>
     <linearGradient id="channel-fill" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0%" stop-color="#f8fafc"/>
-      <stop offset="100%" stop-color="#eef2ff"/>
+      <stop class="channel-stop-1" offset="0%"/>
+      <stop class="channel-stop-2" offset="100%"/>
     </linearGradient>
     <filter id="shadow" x="-16%" y="-24%" width="132%" height="152%">
       <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.12"/>
     </filter>
     <style>
+      :root { color-scheme: light dark; }
+      #arrow path { fill: #475569; }
+      #arrow-muted path { fill: #64748b; }
+      .mux-stop-1 { stop-color: #ecfeff; }
+      .mux-stop-2 { stop-color: #dbeafe; }
+      .channel-stop-1 { stop-color: #f8fafc; }
+      .channel-stop-2 { stop-color: #eef2ff; }
       .bg { fill: #ffffff; }
       .group { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; rx: 18; }
       .group.external { fill: #f0f9ff; stroke: #bae6fd; }
@@ -40,6 +47,34 @@
       .sync { fill: none; stroke: #64748b; stroke-width: 1.9; stroke-dasharray: 6 7; marker-end: url(#arrow-muted); }
       .label-box { fill: #ffffff; stroke: #e2e8f0; stroke-width: 1; rx: 8; }
       .label { fill: #334155; font: 13px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      @media (prefers-color-scheme: dark) {
+        #arrow path { fill: #cbd5e1; }
+        #arrow-muted path { fill: #94a3b8; }
+        .mux-stop-1 { stop-color: #083344; }
+        .mux-stop-2 { stop-color: #172554; }
+        .channel-stop-1 { stop-color: #111827; }
+        .channel-stop-2 { stop-color: #1e1b4b; }
+        .bg { fill: #0b1120; }
+        .group { fill: #111827; stroke: #475569; }
+        .group.external { fill: #082f49; stroke: #0284c7; }
+        .group.controller { fill: #431407; stroke: #fb923c; }
+        .group.kubernetes { fill: #111827; stroke: #475569; }
+        .group-title { fill: #f8fafc; }
+        .node { filter: none; }
+        .node.external { fill: #172554; stroke: #60a5fa; }
+        .node.lb { fill: #042f2e; stroke: #2dd4bf; }
+        .node.mux { stroke: #38bdf8; }
+        .node.channel { stroke: #a5b4fc; }
+        .node.pods { fill: #052e16; stroke: #4ade80; }
+        .node.controller { fill: #431407; stroke: #fb923c; }
+        .title { fill: #f8fafc; }
+        .sub { fill: #cbd5e1; }
+        .edge { stroke: #cbd5e1; }
+        .edge.soft { stroke: #94a3b8; }
+        .sync { stroke: #94a3b8; }
+        .label-box { fill: #0f172a; stroke: #334155; }
+        .label { fill: #e2e8f0; }
+      }
     </style>
   </defs>
 
